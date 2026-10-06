@@ -1,0 +1,1 @@
+GitHub Pages root deployment. Upload the contents of this folder (index.html, style.css, game.js, assets/) to the repository root. Portrait canvas 540x960; tap anywhere on canvas to jump; keyboard is optional only. See README.md for exact publishing steps. Music MP3 files are not included yet; add the six named files later.
