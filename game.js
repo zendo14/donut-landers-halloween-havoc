@@ -1,2121 +1,2066 @@
-// ============================================================
-// DONUT LANDERS: HALLOWEEN HAVOC
-// V1.1
-// Donut Land • Killer Arts Media • #ZTFILMS
-// ============================================================
+/*
+===========================================================
+DONUT LAND: KILLER ARTS MEDIA
+Portrait Mobile Runner
+===========================================================
+
+- Portrait gameplay
+- Tap to jump
+- Character selection
+- Sprinkles
+- Glaze
+- Chocolate Von Donut
+- Original BG.jpg repeating background
+- Menu music
+- Gameplay music
+- Existing obstacle images
+- Logo / by graphic
+- Local high score
+===========================================================
+*/
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-const CONFIG = {
-    width: 1024,
-    height: 576,
+const loadingScreen = document.getElementById("loading-screen");
 
-    gravity: 0.62,
-    jumpPower: -13,
 
-    baseSpeed: 5,
-    maxSpeed: 12,
+/* ========================================================
+   VIRTUAL GAME SIZE
+======================================================== */
 
-    groundY: 485,
+const GAME_WIDTH = 360;
+const GAME_HEIGHT = 640;
 
-    levelDistance: 1200,
+canvas.width = GAME_WIDTH;
+canvas.height = GAME_HEIGHT;
 
-    playerWidth: 58,
-    playerHeight: 58
-};
 
-// ------------------------------------------------------------
-// ASSETS
-// ------------------------------------------------------------
+/* ========================================================
+   ASSET PATHS
+======================================================== */
 
-const assets = {
-    logo: new Image(),
-    by: new Image(),
+const PATHS = {
 
-    backgrounds: [
-        new Image(),
-        new Image(),
-        new Image(),
-        new Image(),
-        new Image()
-    ],
+    logo:
+        "assets/logo.png",
 
-    menuMusic: new Audio("assets/music/menu.mp3"),
-    gameMusic: new Audio("assets/music/gamemusic.mp3")
-};
+    by:
+        "assets/by.png",
 
-assets.logo.src = "assets/logo.png";
-assets.by.src = "assets/by.png";
+    background:
+        "assets/backgrounds/BG.jpg",
 
-assets.backgrounds[0].src = "assets/backgrounds/BG.jpg";
-assets.backgrounds[1].src = "assets/backgrounds/BG2.jpg";
-assets.backgrounds[2].src = "assets/backgrounds/BG3.jpg";
-assets.backgrounds[3].src = "assets/backgrounds/BG4.jpg";
-assets.backgrounds[4].src = "assets/backgrounds/BG5.jpg";
+    characters: {
 
-assets.menuMusic.loop = true;
-assets.gameMusic.loop = true;
+        sprinkles:
+            "assets/characters/sprinkles.png",
 
-assets.menuMusic.volume = 0.65;
-assets.gameMusic.volume = 0.55;
+        glaze:
+            "assets/characters/glaze.png",
 
-// ------------------------------------------------------------
-// GAME STATE
-// ------------------------------------------------------------
-
-let state = {
-    screen: "menu",
-
-    score: 0,
-    level: 1,
-
-    distance: 0,
-    backgroundX: 0,
-
-    gameRunning: false,
-
-    lastTime: 0,
-
-    obstacleTimer: 0,
-    obstacleInterval: 1100,
-
-    candyTimer: 0,
-
-    speed: CONFIG.baseSpeed,
-
-    obstacles: [],
-    collectibles: []
-};
-
-// ------------------------------------------------------------
-// PLAYER
-// ------------------------------------------------------------
-
-const player = {
-    x: 150,
-    y: CONFIG.groundY - CONFIG.playerHeight,
-
-    width: CONFIG.playerWidth,
-    height: CONFIG.playerHeight,
-
-    velocityY: 0,
-
-    grounded: true,
-
-    squash: 1,
-
-    jump() {
-
-        if (!this.grounded) return;
-
-        this.velocityY = CONFIG.jumpPower;
-        this.grounded = false;
-
-        this.squash = 0.85;
+        chocolate:
+            "assets/characters/chocolate.png"
     },
 
-    update(dt) {
+    music: {
 
-        this.velocityY += CONFIG.gravity * dt;
+        menu:
+            "assets/music/menu.mp3",
 
-        this.y += this.velocityY * dt;
-
-        const floor = CONFIG.groundY - this.height;
-
-        if (this.y >= floor) {
-
-            this.y = floor;
-
-            this.velocityY = 0;
-
-            this.grounded = true;
-
-            this.squash += (1 - this.squash) * 0.25;
-
-        } else {
-
-            this.grounded = false;
-
-            this.squash += (1 - this.squash) * 0.15;
-        }
-    },
-
-    draw() {
-
-        ctx.save();
-
-        const centerX = this.x + this.width / 2;
-        const bottomY = this.y + this.height;
-
-        ctx.translate(centerX, bottomY);
-
-        ctx.scale(1, this.squash);
-
-        // Donut body
-        ctx.beginPath();
-        ctx.arc(0, -30, 27, 0, Math.PI * 2);
-
-        ctx.fillStyle = "#d98a45";
-        ctx.fill();
-
-        // Frosting
-        ctx.beginPath();
-        ctx.arc(0, -34, 23, 0, Math.PI * 2);
-
-        ctx.fillStyle = "#f4b6d2";
-        ctx.fill();
-
-        // Donut hole
-        ctx.beginPath();
-        ctx.arc(0, -34, 7, 0, Math.PI * 2);
-
-        ctx.fillStyle = "#7a4326";
-        ctx.fill();
-
-        // Eyes
-        ctx.fillStyle = "#111";
-
-        ctx.beginPath();
-        ctx.arc(-8, -39, 3, 0, Math.PI * 2);
-        ctx.arc(8, -39, 3, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Smile
-        ctx.beginPath();
-
-        ctx.arc(
-            0,
-            -34,
-            8,
-            0.15 * Math.PI,
-            0.85 * Math.PI
-        );
-
-        ctx.strokeStyle = "#111";
-        ctx.lineWidth = 2;
-
-        ctx.stroke();
-
-        ctx.restore();
+        game:
+            "assets/music/gamemusic.mp3"
     }
 };
 
-// ------------------------------------------------------------
-// OBSTACLE TYPES
-// ------------------------------------------------------------
 
-const OBSTACLE_TYPES = [
+/* ========================================================
+   IMAGE LOADER
+======================================================== */
 
-    {
-        type: "half_eaten_donut",
-        width: 58,
-        height: 45
-    },
+const images = {};
 
-    {
-        type: "donut_piece",
-        width: 52,
-        height: 35
-    },
+function loadImage(name, src) {
 
-    {
-        type: "coffee_spill",
-        width: 82,
-        height: 25
-    },
+    return new Promise((resolve) => {
 
-    {
-        type: "coffee_cup",
-        width: 45,
-        height: 62
-    },
+        const image = new Image();
 
-    {
-        type: "white_coffee_mug",
-        width: 52,
-        height: 58
-    },
+        image.onload = function () {
 
-    {
-        type: "donut_box",
-        width: 65,
-        height: 48
-    },
+            images[name] = image;
 
-    {
-        type: "open_donut_box",
-        width: 72,
-        height: 52
-    },
+            resolve(image);
+        };
 
-    {
-        type: "bad_donut",
-        width: 58,
-        height: 48
-    },
+        image.onerror = function () {
 
-    {
-        type: "crushed_donut",
-        width: 65,
-        height: 32
-    },
+            console.warn("Could not load image:", src);
 
-    {
-        type: "donut_garbage",
-        width: 68,
-        height: 58
-    },
+            images[name] = null;
 
-    {
-        type: "zombie_donut",
-        width: 62,
-        height: 62
-    },
+            resolve(null);
+        };
 
-    {
-        type: "ghost_donut",
-        width: 60,
-        height: 65
-    },
-
-    {
-        type: "bat_donut",
-        width: 72,
-        height: 55
-    },
-
-    {
-        type: "tombstone",
-        width: 55,
-        height: 75
-    },
-
-    {
-        type: "skull",
-        width: 55,
-        height: 55
-    },
-
-    {
-        type: "spider",
-        width: 55,
-        height: 65
-    },
-
-    {
-        type: "spider_web",
-        width: 70,
-        height: 65
-    },
-
-    {
-        type: "candy",
-        width: 40,
-        height: 45
-    },
-
-    {
-        type: "jack_o_lantern_donut",
-        width: 62,
-        height: 60
-    },
-
-    {
-        type: "witch_donut",
-        width: 65,
-        height: 65
-    }
-];
-
-// ------------------------------------------------------------
-// OBSTACLE CREATION
-// ------------------------------------------------------------
-
-function createObstacle() {
-
-    const type =
-        OBSTACLE_TYPES[
-            Math.floor(Math.random() * OBSTACLE_TYPES.length)
-        ];
-
-    const obstacle = {
-
-        type: type.type,
-
-        x: CONFIG.width + 80,
-
-        y:
-            CONFIG.groundY -
-            type.height,
-
-        width: type.width,
-
-        height: type.height,
-
-        passed: false
-    };
-
-    state.obstacles.push(obstacle);
-}
-
-// ------------------------------------------------------------
-// COLLECTIBLES
-// ------------------------------------------------------------
-
-function createCandy() {
-
-    state.collectibles.push({
-
-        type: "candy",
-
-        x: CONFIG.width + 80,
-
-        y:
-            CONFIG.groundY -
-            130 -
-            Math.random() * 100,
-
-        width: 38,
-
-        height: 38,
-
-        collected: false
+        image.src = src;
     });
 }
 
-// ------------------------------------------------------------
-// COLLISION
-// ------------------------------------------------------------
 
-function collision(a, b) {
+/* ========================================================
+   AUDIO
+======================================================== */
 
-    const padding = 8;
+const menuMusic = new Audio(PATHS.music.menu);
+const gameMusic = new Audio(PATHS.music.game);
 
-    return (
+menuMusic.loop = true;
+gameMusic.loop = true;
 
-        a.x + padding <
-        b.x + b.width - padding &&
+menuMusic.volume = 0.45;
+gameMusic.volume = 0.45;
 
-        a.x + a.width - padding >
-        b.x + padding &&
 
-        a.y + padding <
-        b.y + b.height - padding &&
+/* ========================================================
+   GAME STATE
+======================================================== */
 
-        a.y + a.height - padding >
-        b.y + padding
-    );
-}
+let state = "menu";
 
-// ------------------------------------------------------------
-// LEVEL SYSTEM
-// ------------------------------------------------------------
+let selectedCharacter = "sprinkles";
 
-function updateLevel() {
+let score = 0;
+let highScore = Number(localStorage.getItem("donutLandHighScore") || 0);
 
-    const newLevel =
-        Math.min(
-            5,
-            Math.floor(state.distance / CONFIG.levelDistance) + 1
+let level = 1;
+
+let gameSpeed = 3.2;
+
+let lastTime = 0;
+
+let backgroundX = 0;
+
+let obstacleTimer = 0;
+
+let gameStarted = false;
+
+
+/* ========================================================
+   PLAYER
+======================================================== */
+
+const player = {
+
+    x: 68,
+
+    y: 450,
+
+    width: 62,
+
+    height: 62,
+
+    velocityY: 0,
+
+    gravity: 0.52,
+
+    jumpPower: -10.5,
+
+    grounded: false
+};
+
+
+/* ========================================================
+   CHARACTERS
+======================================================== */
+
+const characters = {
+
+    sprinkles: {
+
+        name: "SPRINKLES",
+
+        imageName: "sprinkles",
+
+        color: "#ff66aa"
+    },
+
+    glaze: {
+
+        name: "GLAZE",
+
+        imageName: "glaze",
+
+        color: "#ff8b32"
+    },
+
+    chocolate: {
+
+        name: "CHOCOLATE VON DONUT",
+
+        imageName: "chocolate",
+
+        color: "#7b4b2a"
+    }
+};
+
+
+/* ========================================================
+   OBSTACLES
+======================================================== */
+
+const obstacleSources = [
+
+    "assets/objects/coffee_cup.png",
+
+    "assets/objects/half_eaten_donut.png",
+
+    "assets/objects/donut_box.png",
+
+    "assets/objects/zombie_donut.png",
+
+    "assets/objects/donut_garbage.png",
+
+    "assets/objects/bat_donut.png",
+
+    "assets/objects/tombstone_donut.png",
+
+    "assets/objects/ghost_donut.png",
+
+    "assets/objects/spider_donut.png"
+];
+
+const obstacles = [];
+
+const obstacleImages = [];
+
+
+/* ========================================================
+   LOAD EVERYTHING
+======================================================== */
+
+async function loadAssets() {
+
+    await Promise.all([
+
+        loadImage("logo", PATHS.logo),
+
+        loadImage("by", PATHS.by),
+
+        loadImage("background", PATHS.background),
+
+        loadImage(
+            "sprinkles",
+            PATHS.characters.sprinkles
+        ),
+
+        loadImage(
+            "glaze",
+            PATHS.characters.glaze
+        ),
+
+        loadImage(
+            "chocolate",
+            PATHS.characters.chocolate
+        )
+    ]);
+
+
+    for (let i = 0; i < obstacleSources.length; i++) {
+
+        const image = await loadImage(
+            "obstacle" + i,
+            obstacleSources[i]
         );
 
-    if (newLevel !== state.level) {
-
-        state.level = newLevel;
-
-        state.speed =
-            Math.min(
-                CONFIG.maxSpeed,
-                CONFIG.baseSpeed +
-                (state.level - 1) * 1.25
-            );
-
-        state.obstacleInterval =
-            Math.max(
-                650,
-                1100 -
-                (state.level - 1) * 80
-            );
+        if (image) {
+            obstacleImages.push(image);
+        }
     }
+
+
+    loadingScreen.classList.add("hidden");
+
+    startMenuMusic();
+
+    requestAnimationFrame(gameLoop);
 }
 
-// ------------------------------------------------------------
-// BACKGROUND
-// ------------------------------------------------------------
+
+/* ========================================================
+   AUDIO CONTROL
+======================================================== */
+
+function startMenuMusic() {
+
+    gameMusic.pause();
+
+    gameMusic.currentTime = 0;
+
+    menuMusic.play().catch(() => {});
+}
+
+
+function startGameMusic() {
+
+    menuMusic.pause();
+
+    menuMusic.currentTime = 0;
+
+    gameMusic.play().catch(() => {});
+}
+
+
+/* ========================================================
+   BACKGROUND
+======================================================== */
 
 function drawBackground() {
 
-    const image =
-        assets.backgrounds[state.level - 1];
+    const background = images.background;
 
-    if (!image.complete || !image.naturalWidth) {
+    if (!background) {
 
-        ctx.fillStyle = "#111";
+        ctx.fillStyle = "#17213b";
+
         ctx.fillRect(
             0,
             0,
-            canvas.width,
-            canvas.height
+            GAME_WIDTH,
+            GAME_HEIGHT
         );
 
         return;
     }
 
+
+    /*
+        Keep the original background repeating.
+
+        The image is scaled to the complete portrait height.
+        It repeats horizontally as the player moves.
+    */
+
     const scale =
-        canvas.height /
-        image.naturalHeight;
+        GAME_HEIGHT / background.height;
 
     const width =
-        image.naturalWidth * scale;
+        background.width * scale;
 
-    let x =
-        -state.backgroundX % width;
 
-    while (x < canvas.width) {
+    backgroundX -= gameSpeed * 0.25;
 
-        ctx.drawImage(
-            image,
-            x,
-            0,
-            width,
-            canvas.height
-        );
 
-        x += width;
+    if (backgroundX <= -width) {
+
+        backgroundX += width;
     }
+
+
+    ctx.drawImage(
+
+        background,
+
+        backgroundX,
+        0,
+        width,
+        GAME_HEIGHT
+    );
+
+
+    ctx.drawImage(
+
+        background,
+
+        backgroundX + width,
+        0,
+        width,
+        GAME_HEIGHT
+    );
+
+
+    ctx.drawImage(
+
+        background,
+
+        backgroundX + width * 2,
+        0,
+        width,
+        GAME_HEIGHT
+    );
 }
 
-// ------------------------------------------------------------
-// DRAW OBSTACLES
-// ------------------------------------------------------------
 
-function drawObstacle(o) {
+/* ========================================================
+   LOGO
+======================================================== */
+
+function drawLogo() {
+
+    const logo = images.logo;
+
+    if (!logo) {
+
+        ctx.fillStyle = "#fff";
+
+        ctx.textAlign = "center";
+
+        ctx.font =
+            "bold 30px Arial";
+
+        ctx.fillText(
+            "DONUT LAND",
+            GAME_WIDTH / 2,
+            90
+        );
+
+        return;
+    }
+
+
+    const maxWidth = 285;
+
+    const scale =
+        Math.min(
+            1,
+            maxWidth / logo.width
+        );
+
+
+    const width =
+        logo.width * scale;
+
+    const height =
+        logo.height * scale;
+
+
+    ctx.drawImage(
+
+        logo,
+
+        (GAME_WIDTH - width) / 2,
+
+        45,
+
+        width,
+
+        height
+    );
+}
+
+
+/* ========================================================
+   BY GRAPHIC
+======================================================== */
+
+function drawByGraphic() {
+
+    const by = images.by;
+
+    if (!by) {
+        return;
+    }
+
+
+    const maxWidth = 210;
+
+    const scale =
+        Math.min(
+            1,
+            maxWidth / by.width
+        );
+
+
+    const width =
+        by.width * scale;
+
+    const height =
+        by.height * scale;
+
+
+    ctx.drawImage(
+
+        by,
+
+        (GAME_WIDTH - width) / 2,
+
+        GAME_HEIGHT - height - 46,
+
+        width,
+
+        height
+    );
+}
+
+
+/* ========================================================
+   COPYRIGHT
+======================================================== */
+
+function drawCopyright() {
+
+    ctx.fillStyle = "#fff";
+
+    ctx.textAlign = "center";
+
+    ctx.font =
+        "10px Arial";
+
+    ctx.fillText(
+
+        "All rights reserved Donut Land, Killer Arts Media and #ZTFILMS | V1",
+
+        GAME_WIDTH / 2,
+
+        GAME_HEIGHT - 17
+    );
+}
+
+
+/* ========================================================
+   MENU
+======================================================== */
+
+function drawMenu() {
+
+    drawBackground();
+
+    drawLogo();
+
+
+    /*
+        PLAY button
+    */
+
+    drawButton(
+
+        GAME_WIDTH / 2,
+
+        300,
+
+        210,
+
+        58,
+
+        "PLAY"
+    );
+
+
+    /*
+        CHARACTER button
+    */
+
+    drawButton(
+
+        GAME_WIDTH / 2,
+
+        375,
+
+        210,
+
+        58,
+
+        "CHARACTERS"
+    );
+
+
+    /*
+        High score
+    */
+
+    ctx.textAlign = "center";
+
+    ctx.fillStyle = "#fff";
+
+    ctx.font =
+        "bold 16px Arial";
+
+    ctx.fillText(
+
+        "HIGH SCORE: " + highScore,
+
+        GAME_WIDTH / 2,
+
+        455
+    );
+
+
+    drawByGraphic();
+
+    drawCopyright();
+}
+
+
+/* ========================================================
+   BUTTON
+======================================================== */
+
+function drawButton(
+    x,
+    y,
+    width,
+    height,
+    text
+) {
 
     ctx.save();
 
-    ctx.translate(o.x, o.y);
 
-    switch (o.type) {
+    ctx.fillStyle =
+        "rgba(0,0,0,0.78)";
 
-        case "half_eaten_donut":
-            drawHalfDonut(o);
-            break;
+    ctx.strokeStyle =
+        "#ffffff";
 
-        case "donut_piece":
-            drawDonutPiece(o);
-            break;
+    ctx.lineWidth = 3;
 
-        case "coffee_spill":
-            drawCoffeeSpill(o);
-            break;
 
-        case "coffee_cup":
-            drawCoffeeCup(o);
-            break;
+    roundRect(
 
-        case "white_coffee_mug":
-            drawWhiteMug(o);
-            break;
+        x - width / 2,
 
-        case "donut_box":
-            drawDonutBox(o);
-            break;
+        y - height / 2,
 
-        case "open_donut_box":
-            drawOpenDonutBox(o);
-            break;
+        width,
 
-        case "bad_donut":
-            drawBadDonut(o);
-            break;
+        height,
 
-        case "crushed_donut":
-            drawCrushedDonut(o);
-            break;
+        12
+    );
 
-        case "donut_garbage":
-            drawDonutGarbage(o);
-            break;
 
-        case "zombie_donut":
-            drawZombieDonut(o);
-            break;
+    ctx.fill();
 
-        case "ghost_donut":
-            drawGhostDonut(o);
-            break;
+    ctx.stroke();
 
-        case "bat_donut":
-            drawBatDonut(o);
-            break;
 
-        case "tombstone":
-            drawTombstone(o);
-            break;
+    ctx.fillStyle =
+        "#ffffff";
 
-        case "skull":
-            drawSkull(o);
-            break;
+    ctx.textAlign =
+        "center";
 
-        case "spider":
-            drawSpider(o);
-            break;
+    ctx.textBaseline =
+        "middle";
 
-        case "spider_web":
-            drawSpiderWeb(o);
-            break;
+    ctx.font =
+        "bold 23px Arial";
 
-        case "candy":
-            drawCandy(o);
-            break;
 
-        case "jack_o_lantern_donut":
-            drawJackOLantern(o);
-            break;
+    ctx.fillText(
 
-        case "witch_donut":
-            drawWitchDonut(o);
-            break;
-    }
+        text,
+
+        x,
+
+        y
+    );
+
 
     ctx.restore();
 }
 
-// ------------------------------------------------------------
-// DONUT SHOP ART
-// ------------------------------------------------------------
 
-function drawHalfDonut(o) {
+/* ========================================================
+   CHARACTER SELECT
+======================================================== */
 
-    ctx.fillStyle = "#d68a42";
+function drawCharacterSelect() {
 
-    ctx.beginPath();
-    ctx.arc(
-        o.width / 2,
-        o.height / 2,
-        24,
-        0,
-        Math.PI * 2
-    );
+    drawBackground();
 
-    ctx.fill();
-
-    ctx.fillStyle = "#f3a8c6";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        o.height / 2 - 3,
-        19,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#111";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2 + 18,
-        o.height / 2 - 18,
-        9,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-}
-
-function drawDonutPiece(o) {
-
-    ctx.fillStyle = "#d88b46";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        o.height / 2,
-        22,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#f5b5cf";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        o.height / 2,
-        14,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-}
-
-function drawCoffeeSpill(o) {
-
-    ctx.fillStyle = "#5a321f";
-
-    ctx.beginPath();
-
-    ctx.ellipse(
-        o.width / 2,
-        o.height / 2,
-        o.width / 2,
-        o.height / 2.7,
-        0,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#8a5736";
-
-    ctx.beginPath();
-
-    ctx.ellipse(
-        o.width / 2 - 10,
-        o.height / 2 - 3,
-        15,
-        5,
-        0,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-}
-
-function drawCoffeeCup(o) {
-
-    ctx.fillStyle = "#c66b32";
-
-    ctx.fillRect(
-        7,
-        12,
-        o.width - 14,
-        o.height - 16
-    );
-
-    ctx.fillStyle = "#5a321f";
-
-    ctx.beginPath();
-
-    ctx.ellipse(
-        o.width / 2,
-        13,
-        18,
-        7,
-        0,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.strokeStyle = "#c66b32";
-    ctx.lineWidth = 6;
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width - 5,
-        34,
-        12,
-        -Math.PI / 2,
-        Math.PI / 2
-    );
-
-    ctx.stroke();
-}
-
-function drawWhiteMug(o) {
-
-    ctx.fillStyle = "#f4f4f4";
-
-    ctx.fillRect(
-        7,
-        14,
-        o.width - 18,
-        o.height - 17
-    );
-
-    ctx.fillStyle = "#432719";
-
-    ctx.beginPath();
-
-    ctx.ellipse(
-        o.width / 2 - 2,
-        14,
-        18,
-        6,
-        0,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.strokeStyle = "#f4f4f4";
-    ctx.lineWidth = 6;
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width - 7,
-        36,
-        12,
-        -Math.PI / 2,
-        Math.PI / 2
-    );
-
-    ctx.stroke();
-}
-
-function drawDonutBox(o) {
-
-    ctx.fillStyle = "#d79a52";
-
-    ctx.fillRect(
-        4,
-        15,
-        o.width - 8,
-        o.height - 15
-    );
-
-    ctx.strokeStyle = "#7c421f";
-    ctx.lineWidth = 3;
-
-    ctx.strokeRect(
-        4,
-        15,
-        o.width - 8,
-        o.height - 15
-    );
-
-    ctx.fillStyle = "#f5d28c";
-
-    ctx.fillRect(
-        10,
-        21,
-        o.width - 20,
-        8
-    );
-}
-
-function drawOpenDonutBox(o) {
-
-    ctx.fillStyle = "#e5b36a";
-
-    ctx.fillRect(
-        5,
-        22,
-        o.width - 10,
-        o.height - 22
-    );
-
-    ctx.strokeStyle = "#7c421f";
-    ctx.lineWidth = 3;
-
-    ctx.strokeRect(
-        5,
-        22,
-        o.width - 10,
-        o.height - 22
-    );
-
-    ctx.fillStyle = "#f5b6cf";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        37,
-        12,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-}
-
-function drawBadDonut(o) {
-
-    ctx.fillStyle = "#65402d";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        o.height / 2,
-        23,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#333";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        o.height / 2,
-        8,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#e85b42";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        18,
-        20,
-        3,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.arc(
-        39,
-        28,
-        3,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-}
-
-function drawCrushedDonut(o) {
-
-    ctx.fillStyle = "#9d5e35";
-
-    ctx.beginPath();
-
-    ctx.ellipse(
-        o.width / 2,
-        o.height / 2,
-        o.width / 2,
-        o.height / 2.2,
-        0,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#e99fc0";
-
-    ctx.fillRect(
-        10,
-        12,
-        o.width - 20,
-        7
-    );
-}
-
-function drawDonutGarbage(o) {
-
-    ctx.fillStyle = "#727272";
-
-    ctx.fillRect(
-        10,
-        15,
-        o.width - 20,
-        o.height - 15
-    );
-
-    ctx.fillStyle = "#d98245";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        27,
-        20,
-        13,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#f4b0ca";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        48,
-        30,
-        12,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-}
-
-// ------------------------------------------------------------
-// HALLOWEEN ART
-// ------------------------------------------------------------
-
-function drawZombieDonut(o) {
-
-    ctx.fillStyle = "#718f54";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        o.height / 2,
-        27,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#6a4b36";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        o.height / 2,
-        8,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#111";
-
-    ctx.fillRect(15, 18, 7, 7);
-    ctx.fillRect(39, 18, 7, 7);
-
-    ctx.strokeStyle = "#111";
-    ctx.lineWidth = 3;
-
-    ctx.beginPath();
-
-    ctx.moveTo(18, 43);
-    ctx.lineTo(43, 43);
-
-    ctx.stroke();
-}
-
-function drawGhostDonut(o) {
-
-    ctx.fillStyle = "rgba(245,245,255,0.95)";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        27,
-        25,
-        Math.PI,
-        0
-    );
-
-    ctx.lineTo(
-        o.width - 8,
-        o.height - 10
-    );
-
-    ctx.lineTo(
-        o.width - 20,
-        o.height - 20
-    );
-
-    ctx.lineTo(
-        o.width / 2,
-        o.height - 8
-    );
-
-    ctx.lineTo(
-        20,
-        o.height - 20
-    );
-
-    ctx.lineTo(
-        8,
-        o.height - 10
-    );
-
-    ctx.closePath();
-
-    ctx.fill();
-
-    ctx.fillStyle = "#111";
-
-    ctx.beginPath();
-
-    ctx.arc(23, 28, 4, 0, Math.PI * 2);
-    ctx.arc(39, 28, 4, 0, Math.PI * 2);
-
-    ctx.fill();
-}
-
-function drawBatDonut(o) {
-
-    ctx.fillStyle = "#21152b";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        31,
-        20,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.beginPath();
-
-    ctx.moveTo(25, 25);
-    ctx.lineTo(3, 10);
-    ctx.lineTo(8, 36);
-    ctx.lineTo(25, 32);
-
-    ctx.fill();
-
-    ctx.beginPath();
-
-    ctx.moveTo(47, 25);
-    ctx.lineTo(69, 10);
-    ctx.lineTo(64, 36);
-    ctx.lineTo(47, 32);
-
-    ctx.fill();
-
-    ctx.fillStyle = "#e95c54";
-
-    ctx.beginPath();
-
-    ctx.arc(25, 28, 3, 0, Math.PI * 2);
-    ctx.arc(47, 28, 3, 0, Math.PI * 2);
-
-    ctx.fill();
-}
-
-function drawTombstone(o) {
-
-    ctx.fillStyle = "#727272";
-
-    ctx.beginPath();
-
-    ctx.moveTo(7, o.height);
-
-    ctx.lineTo(7, 22);
-
-    ctx.quadraticCurveTo(
-        o.width / 2,
-        0,
-        o.width - 7,
-        22
-    );
-
-    ctx.lineTo(
-        o.width - 7,
-        o.height
-    );
-
-    ctx.closePath();
-
-    ctx.fill();
-
-    ctx.fillStyle = "#252525";
-
-    ctx.font = "bold 20px Arial";
 
     ctx.textAlign = "center";
 
+    ctx.fillStyle = "#fff";
+
+    ctx.font =
+        "bold 27px Arial";
+
     ctx.fillText(
-        "RIP",
-        o.width / 2,
+
+        "CHOOSE YOUR DONUT",
+
+        GAME_WIDTH / 2,
+
         45
     );
-}
 
-function drawSkull(o) {
 
-    ctx.fillStyle = "#eee";
+    const names =
+        Object.keys(characters);
 
-    ctx.beginPath();
 
-    ctx.arc(
-        o.width / 2,
-        23,
-        21,
-        0,
-        Math.PI * 2
+    const cardWidth = 100;
+
+    const cardHeight = 175;
+
+    const gap = 10;
+
+    const totalWidth =
+        cardWidth * 3 +
+        gap * 2;
+
+
+    const startX =
+        (GAME_WIDTH - totalWidth) / 2;
+
+
+    names.forEach(
+        (name, index) => {
+
+            const character =
+                characters[name];
+
+
+            const x =
+                startX +
+                index *
+                (cardWidth + gap);
+
+
+            const y = 105;
+
+
+            /*
+                Card
+            */
+
+            ctx.fillStyle =
+                name === selectedCharacter
+                    ? "rgba(255,255,255,0.95)"
+                    : "rgba(0,0,0,0.72)";
+
+
+            ctx.strokeStyle =
+                name === selectedCharacter
+                    ? character.color
+                    : "#ffffff";
+
+
+            ctx.lineWidth =
+                name === selectedCharacter
+                    ? 5
+                    : 2;
+
+
+            roundRect(
+
+                x,
+
+                y,
+
+                cardWidth,
+
+                cardHeight,
+
+                12
+            );
+
+
+            ctx.fill();
+
+            ctx.stroke();
+
+
+            /*
+                Character image
+            */
+
+            const image =
+                images[character.imageName];
+
+
+            if (image) {
+
+                const maxSize = 78;
+
+                const scale =
+                    Math.min(
+
+                        maxSize / image.width,
+
+                        maxSize / image.height
+                    );
+
+
+                const width =
+                    image.width * scale;
+
+                const height =
+                    image.height * scale;
+
+
+                ctx.drawImage(
+
+                    image,
+
+                    x +
+                        (cardWidth - width) / 2,
+
+                    y + 22,
+
+                    width,
+
+                    height
+                );
+            }
+
+
+            /*
+                Character name
+            */
+
+            ctx.fillStyle =
+                name === selectedCharacter
+                    ? "#111"
+                    : "#fff";
+
+
+            ctx.font =
+                "bold 12px Arial";
+
+
+            ctx.textAlign =
+                "center";
+
+
+            let displayName =
+                character.name;
+
+
+            if (name === "chocolate") {
+
+                displayName =
+                    "CHOCOLATE";
+            }
+
+
+            ctx.fillText(
+
+                displayName,
+
+                x + cardWidth / 2,
+
+                y + 125
+            );
+
+
+            if (name === selectedCharacter) {
+
+                ctx.font =
+                    "bold 10px Arial";
+
+                ctx.fillText(
+
+                    "SELECTED",
+
+                    x + cardWidth / 2,
+
+                    y + 148
+                );
+            }
+        }
     );
 
-    ctx.fill();
 
-    ctx.fillRect(
-        17,
-        30,
-        22,
-        17
-    );
+    /*
+        Back button
+    */
 
-    ctx.fillStyle = "#111";
+    drawButton(
 
-    ctx.beginPath();
+        GAME_WIDTH / 2,
 
-    ctx.arc(21, 23, 6, 0, Math.PI * 2);
-    ctx.arc(35, 23, 6, 0, Math.PI * 2);
+        510,
 
-    ctx.fill();
+        150,
 
-    ctx.beginPath();
-
-    ctx.moveTo(28, 28);
-    ctx.lineTo(24, 34);
-    ctx.lineTo(32, 34);
-
-    ctx.fill();
-}
-
-function drawSpider(o) {
-
-    ctx.strokeStyle = "#111";
-    ctx.lineWidth = 4;
-
-    ctx.beginPath();
-
-    ctx.moveTo(
-        o.width / 2,
-        0
-    );
-
-    ctx.lineTo(
-        o.width / 2,
-        17
-    );
-
-    ctx.stroke();
-
-    ctx.fillStyle = "#171717";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        36,
-        15,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.strokeStyle = "#171717";
-
-    for (let i = 0; i < 4; i++) {
-
-        const y = 23 + i * 9;
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            o.width / 2 - 8,
-            y
-        );
-
-        ctx.lineTo(
-            2,
-            y - 10
-        );
-
-        ctx.moveTo(
-            o.width / 2 + 8,
-            y
-        );
-
-        ctx.lineTo(
-            o.width - 2,
-            y - 10
-        );
-
-        ctx.stroke();
-    }
-}
-
-function drawSpiderWeb(o) {
-
-    ctx.strokeStyle = "#ddd";
-    ctx.lineWidth = 2;
-
-    const cx = o.width / 2;
-    const cy = o.height / 2;
-
-    for (let i = 0; i < 8; i++) {
-
-        const angle =
-            i *
-            Math.PI /
-            4;
-
-        ctx.beginPath();
-
-        ctx.moveTo(cx, cy);
-
-        ctx.lineTo(
-            cx +
-            Math.cos(angle) * 35,
-
-            cy +
-            Math.sin(angle) * 35
-        );
-
-        ctx.stroke();
-    }
-
-    for (let r = 10; r <= 30; r += 10) {
-
-        ctx.beginPath();
-
-        ctx.arc(
-            cx,
-            cy,
-            r,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.stroke();
-    }
-}
-
-function drawCandy(o) {
-
-    ctx.fillStyle = "#ff6f91";
-
-    ctx.beginPath();
-
-    ctx.roundRect(
-        8,
-        10,
-        24,
-        22,
-        6
-    );
-
-    ctx.fill();
-
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 3;
-
-    ctx.beginPath();
-
-    ctx.moveTo(8, 14);
-    ctx.lineTo(1, 7);
-
-    ctx.moveTo(32, 14);
-    ctx.lineTo(39, 7);
-
-    ctx.stroke();
-}
-
-function drawJackOLantern(o) {
-
-    ctx.fillStyle = "#ed782d";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        o.height / 2,
-        27,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#111";
-
-    ctx.beginPath();
-
-    ctx.moveTo(15, 27);
-    ctx.lineTo(25, 23);
-    ctx.lineTo(22, 34);
-
-    ctx.fill();
-
-    ctx.beginPath();
-
-    ctx.moveTo(39, 23);
-    ctx.lineTo(49, 27);
-    ctx.lineTo(42, 34);
-
-    ctx.fill();
-
-    ctx.fillRect(
-        21,
-        39,
-        20,
-        4
-    );
-}
-
-function drawWitchDonut(o) {
-
-    ctx.fillStyle = "#9d68bd";
-
-    ctx.beginPath();
-
-    ctx.arc(
-        o.width / 2,
-        39,
-        21,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#20152d";
-
-    ctx.beginPath();
-
-    ctx.moveTo(
-        12,
-        28
-    );
-
-    ctx.lineTo(
-        32,
-        2
-    );
-
-    ctx.lineTo(
-        53,
-        28
-    );
-
-    ctx.closePath();
-
-    ctx.fill();
-
-    ctx.fillStyle = "#e0a73a";
-
-    ctx.fillRect(
-        8,
-        27,
         48,
-        6
+
+        "BACK"
     );
+
+
+    /*
+        Continue
+    */
+
+    drawButton(
+
+        GAME_WIDTH / 2,
+
+        570,
+
+        190,
+
+        48,
+
+        "PLAY"
+    );
+
+
+    drawCopyright();
 }
 
-// ------------------------------------------------------------
-// COLLECTIBLE DRAWING
-// ------------------------------------------------------------
 
-function drawCollectible(c) {
-
-    drawCandy(c);
-}
-
-// ------------------------------------------------------------
-// UPDATE OBSTACLES
-// ------------------------------------------------------------
-
-function updateObstacles(dt) {
-
-    state.obstacleTimer += dt * 16.67;
-
-    if (
-        state.obstacleTimer >
-        state.obstacleInterval
-    ) {
-
-        createObstacle();
-
-        state.obstacleTimer = 0;
-    }
-
-    for (let i = state.obstacles.length - 1; i >= 0; i--) {
-
-        const o = state.obstacles[i];
-
-        o.x -= state.speed * dt;
-
-        if (!o.passed && o.x + o.width < player.x) {
-
-            o.passed = true;
-
-            state.score += 10;
-        }
-
-        if (collision(player, o)) {
-
-            endGame();
-
-            return;
-        }
-
-        if (o.x + o.width < -100) {
-
-            state.obstacles.splice(i, 1);
-        }
-    }
-}
-
-// ------------------------------------------------------------
-// UPDATE COLLECTIBLES
-// ------------------------------------------------------------
-
-function updateCollectibles(dt) {
-
-    state.candyTimer += dt * 16.67;
-
-    if (state.candyTimer > 1600) {
-
-        createCandy();
-
-        state.candyTimer = 0;
-    }
-
-    for (
-        let i = state.collectibles.length - 1;
-        i >= 0;
-        i--
-    ) {
-
-        const c = state.collectibles[i];
-
-        c.x -= state.speed * dt;
-
-        if (collision(player, c)) {
-
-            state.score += 25;
-
-            state.collectibles.splice(i, 1);
-
-            continue;
-        }
-
-        if (c.x + c.width < -50) {
-
-            state.collectibles.splice(i, 1);
-        }
-    }
-}
-
-// ------------------------------------------------------------
-// GAME UPDATE
-// ------------------------------------------------------------
-
-function update(dt) {
-
-    if (!state.gameRunning) return;
-
-    player.update(dt);
-
-    updateObstacles(dt);
-
-    updateCollectibles(dt);
-
-    state.distance += state.speed * dt;
-
-    state.backgroundX +=
-        state.speed * dt;
-
-    updateLevel();
-
-    state.score +=
-        Math.floor(state.speed * dt);
-}
-
-// ------------------------------------------------------------
-// GAME DRAW
-// ------------------------------------------------------------
+/* ========================================================
+   GAME
+======================================================== */
 
 function drawGame() {
 
     drawBackground();
 
-    // Ground shadow
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
 
-    ctx.fillRect(
-        0,
-        CONFIG.groundY,
-        canvas.width,
-        canvas.height -
-        CONFIG.groundY
+    /*
+        Ground
+    */
+
+    const groundY =
+        GAME_HEIGHT - 90;
+
+
+    /*
+        Player
+    */
+
+    drawPlayer();
+
+
+    /*
+        Obstacles
+    */
+
+    obstacles.forEach(
+        obstacle => {
+
+            drawObstacle(obstacle);
+        }
     );
 
-    // Collectibles
-    for (const c of state.collectibles) {
 
-        ctx.save();
+    /*
+        Score
+    */
 
-        ctx.translate(
-            c.x,
-            c.y
-        );
-
-        drawCollectible(c);
-
-        ctx.restore();
-    }
-
-    // Obstacles
-    for (const o of state.obstacles) {
-
-        drawObstacle(o);
-    }
-
-    player.draw();
-
-    drawHUD();
-}
-
-// ------------------------------------------------------------
-// HUD
-// ------------------------------------------------------------
-
-function drawHUD() {
-
-    ctx.save();
+    ctx.textAlign =
+        "left";
 
     ctx.fillStyle =
-        "rgba(0,0,0,0.55)";
-
-    ctx.fillRect(
-        15,
-        15,
-        235,
-        78
-    );
-
-    ctx.fillStyle = "#fff";
+        "#fff";
 
     ctx.font =
-        "bold 20px Arial";
+        "bold 18px Arial";
 
-    ctx.textAlign = "left";
 
     ctx.fillText(
+
         "SCORE: " +
-        state.score,
-        30,
-        43
+        Math.floor(score),
+
+        15,
+
+        30
     );
+
+
+    ctx.font =
+        "bold 13px Arial";
+
 
     ctx.fillText(
-        "LEVEL: " +
-        state.level,
-        30,
-        70
-    );
 
-    ctx.restore();
+        "LEVEL " + level,
+
+        15,
+
+        50
+    );
 }
 
-// ------------------------------------------------------------
-// MENU
-// ------------------------------------------------------------
 
-function drawMenu() {
+/* ========================================================
+   PLAYER DRAW
+======================================================== */
 
-    ctx.fillStyle = "#090909";
+function drawPlayer() {
 
-    ctx.fillRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
+    const character =
+        characters[selectedCharacter];
+
+
+    const image =
+        images[character.imageName];
+
+
+    if (!image) {
+
+        ctx.fillStyle =
+            character.color;
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+
+            player.x + player.width / 2,
+
+            player.y + player.height / 2,
+
+            player.width / 2,
+
+            0,
+
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+        return;
+    }
+
+
+    ctx.drawImage(
+
+        image,
+
+        player.x,
+
+        player.y,
+
+        player.width,
+
+        player.height
     );
+}
 
-    // Logo
+
+/* ========================================================
+   OBSTACLE DRAW
+======================================================== */
+
+function drawObstacle(obstacle) {
+
+    if (!obstacle.image) {
+
+        ctx.fillStyle =
+            "#222";
+
+        ctx.fillRect(
+
+            obstacle.x,
+
+            obstacle.y,
+
+            obstacle.width,
+
+            obstacle.height
+        );
+
+        return;
+    }
+
+
+    ctx.drawImage(
+
+        obstacle.image,
+
+        obstacle.x,
+
+        obstacle.y,
+
+        obstacle.width,
+
+        obstacle.height
+    );
+}
+
+
+/* ========================================================
+   CREATE OBSTACLE
+======================================================== */
+
+function createObstacle() {
+
     if (
-        assets.logo.complete &&
-        assets.logo.naturalWidth
+        obstacleImages.length === 0
+    ) {
+        return;
+    }
+
+
+    const image =
+        obstacleImages[
+            Math.floor(
+                Math.random() *
+                obstacleImages.length
+            )
+        ];
+
+
+    const size =
+        42 +
+        Math.random() * 15;
+
+
+    const groundY =
+        GAME_HEIGHT - 88;
+
+
+    obstacles.push({
+
+        x:
+            GAME_WIDTH + 30,
+
+        y:
+            groundY - size,
+
+        width:
+            size,
+
+        height:
+            size,
+
+        image:
+            image,
+
+        counted:
+            false
+    });
+}
+
+
+/* ========================================================
+   UPDATE PLAYER
+======================================================== */
+
+function updatePlayer(delta) {
+
+    player.velocityY +=
+        player.gravity *
+        delta;
+
+
+    player.y +=
+        player.velocityY *
+        delta;
+
+
+    const groundY =
+        GAME_HEIGHT - 88 -
+        player.height;
+
+
+    if (
+        player.y >= groundY
     ) {
 
-        const maxWidth = 570;
+        player.y =
+            groundY;
 
-        const scale =
-            Math.min(
-                1,
-                maxWidth /
-                assets.logo.naturalWidth
-            );
+        player.velocityY =
+            0;
 
-        const w =
-            assets.logo.naturalWidth *
-            scale;
-
-        const h =
-            assets.logo.naturalHeight *
-            scale;
-
-        const float =
-            Math.sin(
-                performance.now() / 700
-            ) * 8;
-
-        ctx.drawImage(
-            assets.logo,
-            canvas.width / 2 - w / 2,
-            65 + float,
-            w,
-            h
-        );
+        player.grounded =
+            true;
 
     } else {
 
-        ctx.fillStyle = "#fff";
-
-        ctx.font =
-            "bold 60px Arial";
-
-        ctx.textAlign = "center";
-
-        ctx.fillText(
-            "DONUT LAND",
-            canvas.width / 2,
-            170
-        );
+        player.grounded =
+            false;
     }
-
-    // Start button
-    ctx.fillStyle = "#d58a42";
-
-    ctx.roundRect(
-        canvas.width / 2 - 145,
-        350,
-        290,
-        70,
-        15
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "#fff";
-
-    ctx.font =
-        "bold 28px Arial";
-
-    ctx.textAlign = "center";
-
-    ctx.fillText(
-        "TAP TO PLAY",
-        canvas.width / 2,
-        394
-    );
-
-    // Creator graphic
-    if (
-        assets.by.complete &&
-        assets.by.naturalWidth
-    ) {
-
-        const w = 330;
-
-        const h =
-            assets.by.naturalHeight *
-            (w /
-            assets.by.naturalWidth);
-
-        ctx.drawImage(
-            assets.by,
-            canvas.width / 2 - w / 2,
-            445,
-            w,
-            h
-        );
-    }
-
-    ctx.fillStyle = "#aaa";
-
-    ctx.font =
-        "14px Arial";
-
-    ctx.fillText(
-        "All rights reserved Donut Land, Killer Arts Media and #ZTFILMS | V1.1",
-        canvas.width / 2,
-        555
-    );
 }
 
-// ------------------------------------------------------------
-// GAME OVER
-// ------------------------------------------------------------
+
+/* ========================================================
+   UPDATE OBSTACLES
+======================================================== */
+
+function updateObstacles(delta) {
+
+    obstacleTimer += delta;
+
+
+    /*
+        Spawn obstacles.
+    */
+
+    if (
+        obstacleTimer >
+        1150
+    ) {
+
+        createObstacle();
+
+        obstacleTimer = 0;
+    }
+
+
+    obstacles.forEach(
+        obstacle => {
+
+            obstacle.x -=
+                gameSpeed *
+                delta /
+                16.67;
+
+
+            if (
+                !obstacle.counted &&
+                obstacle.x +
+                    obstacle.width <
+                    player.x
+            ) {
+
+                obstacle.counted =
+                    true;
+
+                score += 10;
+            }
+        }
+    );
+
+
+    /*
+        Remove old obstacles.
+    */
+
+    for (
+        let i =
+            obstacles.length - 1;
+
+        i >= 0;
+
+        i--
+    ) {
+
+        if (
+            obstacles[i].x +
+                obstacles[i].width <
+                -50
+        ) {
+
+            obstacles.splice(
+                i,
+                1
+            );
+        }
+    }
+}
+
+
+/* ========================================================
+   COLLISION
+======================================================== */
+
+function checkCollision() {
+
+    /*
+        Slightly shrink the collision
+        boxes so the game feels fair.
+    */
+
+    const padding = 9;
+
+
+    const playerBox = {
+
+        x:
+            player.x +
+            padding,
+
+        y:
+            player.y +
+            padding,
+
+        width:
+            player.width -
+            padding * 2,
+
+        height:
+            player.height -
+            padding * 2
+    };
+
+
+    for (
+        const obstacle of obstacles
+    ) {
+
+        const obstacleBox = {
+
+            x:
+                obstacle.x +
+                5,
+
+            y:
+                obstacle.y +
+                5,
+
+            width:
+                obstacle.width -
+                10,
+
+            height:
+                obstacle.height -
+                10
+        };
+
+
+        if (
+
+            playerBox.x <
+                obstacleBox.x +
+                obstacleBox.width &&
+
+            playerBox.x +
+                playerBox.width >
+                obstacleBox.x &&
+
+            playerBox.y <
+                obstacleBox.y +
+                obstacleBox.height &&
+
+            playerBox.y +
+                playerBox.height >
+                obstacleBox.y
+
+        ) {
+
+            return true;
+        }
+    }
+
+
+    return false;
+}
+
+
+/* ========================================================
+   START GAME
+======================================================== */
+
+function startGame() {
+
+    state =
+        "game";
+
+
+    score =
+        0;
+
+
+    level =
+        1;
+
+
+    gameSpeed =
+        3.2;
+
+
+    backgroundX =
+        0;
+
+
+    obstacleTimer =
+        0;
+
+
+    obstacles.length =
+        0;
+
+
+    player.x =
+        68;
+
+
+    player.y =
+        450;
+
+
+    player.velocityY =
+        0;
+
+
+    gameStarted =
+        true;
+
+
+    startGameMusic();
+}
+
+
+/* ========================================================
+   GAME OVER
+======================================================== */
+
+function gameOver() {
+
+    state =
+        "gameover";
+
+
+    if (
+        score >
+        highScore
+    ) {
+
+        highScore =
+            Math.floor(score);
+
+
+        localStorage.setItem(
+
+            "donutLandHighScore",
+
+            highScore
+        );
+    }
+
+
+    gameMusic.pause();
+
+    gameMusic.currentTime =
+        0;
+}
+
+
+/* ========================================================
+   DRAW GAME OVER
+======================================================== */
 
 function drawGameOver() {
 
     drawGame();
 
+
     ctx.fillStyle =
         "rgba(0,0,0,0.72)";
 
+
     ctx.fillRect(
+
         0,
+
         0,
-        canvas.width,
-        canvas.height
+
+        GAME_WIDTH,
+
+        GAME_HEIGHT
     );
 
-    ctx.fillStyle = "#fff";
 
-    ctx.textAlign = "center";
+    ctx.textAlign =
+        "center";
+
+
+    ctx.fillStyle =
+        "#fff";
+
 
     ctx.font =
-        "bold 58px Arial";
+        "bold 38px Arial";
+
 
     ctx.fillText(
+
         "GAME OVER",
-        canvas.width / 2,
-        190
+
+        GAME_WIDTH / 2,
+
+        220
     );
+
 
     ctx.font =
-        "bold 28px Arial";
+        "bold 22px Arial";
+
 
     ctx.fillText(
+
         "SCORE: " +
-        state.score,
-        canvas.width / 2,
-        245
+        Math.floor(score),
+
+        GAME_WIDTH / 2,
+
+        270
     );
 
-    ctx.fillStyle = "#d58a42";
 
-    ctx.roundRect(
-        canvas.width / 2 - 145,
-        320,
-        290,
-        65,
-        15
-    );
+    ctx.font =
+        "18px Arial";
 
-    ctx.fill();
-
-    ctx.fillStyle = "#fff";
 
     ctx.fillText(
-        "TAP TO TRY AGAIN",
-        canvas.width / 2,
-        362
+
+        "HIGH SCORE: " +
+        highScore,
+
+        GAME_WIDTH / 2,
+
+        305
+    );
+
+
+    drawButton(
+
+        GAME_WIDTH / 2,
+
+        380,
+
+        190,
+
+        55,
+
+        "PLAY AGAIN"
+    );
+
+
+    drawButton(
+
+        GAME_WIDTH / 2,
+
+        450,
+
+        190,
+
+        55,
+
+        "MENU"
     );
 }
 
-// ------------------------------------------------------------
-// START GAME
-// ------------------------------------------------------------
 
-function startGame() {
+/* ========================================================
+   INPUT
+======================================================== */
 
-    state.screen = "game";
-
-    state.score = 0;
-
-    state.level = 1;
-
-    state.distance = 0;
-
-    state.backgroundX = 0;
-
-    state.speed =
-        CONFIG.baseSpeed;
-
-    state.obstacles = [];
-
-    state.collectibles = [];
-
-    state.obstacleTimer = 0;
-
-    state.candyTimer = 0;
-
-    player.x = 150;
-
-    player.y =
-        CONFIG.groundY -
-        player.height;
-
-    player.velocityY = 0;
-
-    player.grounded = true;
-
-    state.gameRunning = true;
-
-    assets.menuMusic.pause();
-
-    assets.menuMusic.currentTime = 0;
-
-    assets.gameMusic.currentTime = 0;
-
-    assets.gameMusic.play()
-        .catch(() => {});
-}
-
-// ------------------------------------------------------------
-// GAME OVER
-// ------------------------------------------------------------
-
-function endGame() {
-
-    state.gameRunning = false;
-
-    state.screen = "gameover";
-
-    assets.gameMusic.pause();
-
-    assets.gameMusic.currentTime = 0;
-}
-
-// ------------------------------------------------------------
-// RETURN TO MENU
-// ------------------------------------------------------------
-
-function returnToMenu() {
-
-    state.screen = "menu";
-
-    state.gameRunning = false;
-
-    assets.gameMusic.pause();
-
-    assets.gameMusic.currentTime = 0;
-
-    assets.menuMusic.play()
-        .catch(() => {});
-}
-
-// ------------------------------------------------------------
-// INPUT
-// ------------------------------------------------------------
-
-function handleInput() {
-
-    if (state.screen === "menu") {
-
-        startGame();
-
-        return;
-    }
-
-    if (state.screen === "game") {
-
-        player.jump();
-
-        return;
-    }
-
-    if (state.screen === "gameover") {
-
-        startGame();
-
-        return;
-    }
-}
-
-// Mouse
 canvas.addEventListener(
-    "mousedown",
-    handleInput
-);
 
-// Touch / iPhone / Android
-canvas.addEventListener(
-    "touchstart",
-    function(e) {
+    "pointerdown",
 
-        e.preventDefault();
+    function (event) {
 
-        handleInput();
+        event.preventDefault();
 
+
+        const rect =
+            canvas.getBoundingClientRect();
+
+
+        const scaleX =
+            GAME_WIDTH /
+            rect.width;
+
+        const scaleY =
+            GAME_HEIGHT /
+            rect.height;
+
+
+        const x =
+            (event.clientX -
+                rect.left) *
+            scaleX;
+
+
+        const y =
+            (event.clientY -
+                rect.top) *
+            scaleY;
+
+
+        handleInput(x, y);
     },
+
     {
         passive: false
     }
 );
 
-// Keyboard remains available on desktop
-window.addEventListener(
-    "keydown",
-    function(e) {
 
-        if (
-            e.code === "Space" ||
-            e.code === "ArrowUp"
-        ) {
+/* ========================================================
+   INPUT HANDLER
+======================================================== */
 
-            e.preventDefault();
+function handleInput(x, y) {
 
-            handleInput();
-        }
-    }
-);
 
-// ------------------------------------------------------------
-// AUDIO START
-// ------------------------------------------------------------
-
-// Mobile browsers generally require audio to begin after
-// a user interaction.
-
-document.addEventListener(
-    "touchstart",
-    function startAudio() {
-
-        if (state.screen === "menu") {
-
-            assets.menuMusic.play()
-                .catch(() => {});
-        }
-
-        document.removeEventListener(
-            "touchstart",
-            startAudio
-        );
-    },
-    {
-        once: true
-    }
-);
-
-document.addEventListener(
-    "click",
-    function startMenuAudio() {
-
-        if (state.screen === "menu") {
-
-            assets.menuMusic.play()
-                .catch(() => {});
-        }
-
-    }
-);
-
-// ------------------------------------------------------------
-// RESPONSIVE CANVAS
-// ------------------------------------------------------------
-
-function resizeCanvas() {
-
-    const ratio =
-        CONFIG.width /
-        CONFIG.height;
-
-    let width =
-        window.innerWidth;
-
-    let height =
-        window.innerHeight;
-
-    if (width / height > ratio) {
-
-        width =
-            height * ratio;
-
-    } else {
-
-        height =
-            width / ratio;
-    }
-
-    canvas.style.width =
-        width + "px";
-
-    canvas.style.height =
-        height + "px";
-}
-
-window.addEventListener(
-    "resize",
-    resizeCanvas
-);
-
-resizeCanvas();
-
-// ------------------------------------------------------------
-// MAIN LOOP
-// ------------------------------------------------------------
-
-function gameLoop(timestamp) {
-
-    if (!state.lastTime) {
-
-        state.lastTime = timestamp;
-    }
-
-    let dt =
-        (timestamp -
-        state.lastTime) /
-        16.67;
-
-    state.lastTime = timestamp;
-
-    // Prevent huge jumps after tab switching
-    dt =
-        Math.min(
-            dt,
-            2
-        );
-
-    ctx.clearRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
+    /*
+        MENU
+    */
 
     if (
-        state.screen === "menu"
+        state === "menu"
+    ) {
+
+        /*
+            PLAY
+        */
+
+        if (
+            x > 70 &&
+            x < 290 &&
+            y > 270 &&
+            y < 330
+        ) {
+
+            state =
+                "characterSelect";
+
+            return;
+        }
+
+
+        /*
+            CHARACTERS
+        */
+
+        if (
+            x > 70 &&
+            x < 290 &&
+            y > 345 &&
+            y < 405
+        ) {
+
+            state =
+                "characterSelect";
+
+            return;
+        }
+    }
+
+
+    /*
+        CHARACTER SELECT
+    */
+
+    else if (
+        state === "characterSelect"
+    ) {
+
+        const cardWidth =
+            100;
+
+        const gap =
+            10;
+
+        const totalWidth =
+            cardWidth * 3 +
+            gap * 2;
+
+        const startX =
+            (GAME_WIDTH -
+                totalWidth) /
+            2;
+
+
+        const names =
+            Object.keys(characters);
+
+
+        for (
+            let i = 0;
+
+            i < names.length;
+
+            i++
+        ) {
+
+            const cardX =
+                startX +
+                i *
+                (cardWidth + gap);
+
+
+            if (
+                x >= cardX &&
+                x <= cardX +
+                    cardWidth &&
+                y >= 105 &&
+                y <= 280
+            ) {
+
+                selectedCharacter =
+                    names[i];
+
+                return;
+            }
+        }
+
+
+        /*
+            BACK
+        */
+
+        if (
+            x > 105 &&
+            x < 255 &&
+            y > 485 &&
+            y < 535
+        ) {
+
+            state =
+                "menu";
+
+            startMenuMusic();
+
+            return;
+        }
+
+
+        /*
+            PLAY
+        */
+
+        if (
+            x > 85 &&
+            x < 275 &&
+            y > 545 &&
+            y < 600
+        ) {
+
+            startGame();
+
+            return;
+        }
+    }
+
+
+    /*
+        GAME
+    */
+
+    else if (
+        state === "game"
+    ) {
+
+        jump();
+    }
+
+
+    /*
+        GAME OVER
+    */
+
+    else if (
+        state === "gameover"
+    ) {
+
+        if (
+            x > 85 &&
+            x < 275 &&
+            y > 350 &&
+            y < 410
+        ) {
+
+            startGame();
+
+            return;
+        }
+
+
+        if (
+            x > 85 &&
+            x < 275 &&
+            y > 425 &&
+            y < 480
+        ) {
+
+            state =
+                "menu";
+
+            startMenuMusic();
+
+            return;
+        }
+    }
+}
+
+
+/* ========================================================
+   JUMP
+======================================================== */
+
+function jump() {
+
+    if (
+        state !== "game"
+    ) {
+        return;
+    }
+
+
+    if (
+        player.grounded
+    ) {
+
+        player.velocityY =
+            player.jumpPower;
+
+        player.grounded =
+            false;
+    }
+}
+
+
+/* ========================================================
+   KEYBOARD
+   Kept only for desktop testing.
+   Phone remains tap-only.
+======================================================== */
+
+window.addEventListener(
+
+    "keydown",
+
+    function (event) {
+
+        if (
+            event.code ===
+                "Space" ||
+            event.code ===
+                "ArrowUp"
+        ) {
+
+            event.preventDefault();
+
+            if (
+                state === "game"
+            ) {
+
+                jump();
+            }
+        }
+    }
+);
+
+
+/* ========================================================
+   LEVEL PROGRESSION
+======================================================== */
+
+function updateLevel() {
+
+    const newLevel =
+        Math.min(
+
+            5,
+
+            Math.floor(
+                score / 100
+            ) + 1
+        );
+
+
+    if (
+        newLevel !== level
+    ) {
+
+        level =
+            newLevel;
+
+
+        gameSpeed =
+            3.2 +
+            (level - 1) *
+            0.35;
+    }
+}
+
+
+/* ========================================================
+   MAIN UPDATE
+======================================================== */
+
+function update(delta) {
+
+    if (
+        state !== "game"
+    ) {
+
+        return;
+    }
+
+
+    updatePlayer(delta);
+
+    updateObstacles(delta);
+
+    updateLevel();
+
+
+    if (
+        checkCollision()
+    ) {
+
+        gameOver();
+    }
+}
+
+
+/* ========================================================
+   MAIN DRAW
+======================================================== */
+
+function draw() {
+
+    ctx.clearRect(
+
+        0,
+
+        0,
+
+        GAME_WIDTH,
+
+        GAME_HEIGHT
+    );
+
+
+    if (
+        state === "menu"
     ) {
 
         drawMenu();
 
     } else if (
-        state.screen === "game"
+        state === "characterSelect"
     ) {
 
-        update(dt);
+        drawCharacterSelect();
+
+    } else if (
+        state === "game"
+    ) {
 
         drawGame();
 
     } else if (
-        state.screen === "gameover"
+        state === "gameover"
     ) {
 
         drawGameOver();
     }
+}
+
+
+/* ========================================================
+   GAME LOOP
+======================================================== */
+
+function gameLoop(timestamp) {
+
+    if (!lastTime) {
+
+        lastTime =
+            timestamp;
+    }
+
+
+    let delta =
+        timestamp -
+        lastTime;
+
+
+    lastTime =
+        timestamp;
+
+
+    /*
+        Prevent huge jumps after
+        browser tab switching.
+    */
+
+    delta =
+        Math.min(
+            delta,
+            32
+        );
+
+
+    update(delta);
+
+    draw();
+
 
     requestAnimationFrame(
         gameLoop
     );
 }
 
-// ------------------------------------------------------------
-// START
-// ------------------------------------------------------------
 
-requestAnimationFrame(
-    gameLoop
-);
+/* ========================================================
+   ROUNDED RECTANGLE
+======================================================== */
+
+function roundRect(
+    x,
+    y,
+    width,
+    height,
+    radius
+) {
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x + radius,
+        y
+    );
+
+    ctx.lineTo(
+        x + width - radius,
+        y
+    );
+
+    ctx.quadraticCurveTo(
+        x + width,
+        y,
+        x + width,
+        y + radius
+    );
+
+    ctx.lineTo(
+        x + width,
+        y + height - radius
+    );
+
+    ctx.quadraticCurveTo(
+        x + width,
+        y + height,
+        x + width - radius,
+        y + height
+    );
+
+    ctx.lineTo(
+        x + radius,
+        y + height
+    );
+
+    ctx.quadraticCurveTo(
+        x,
+        y + height,
+        x,
+        y + height - radius
+    );
+
+    ctx.lineTo(
+        x,
+        y + radius
+    );
+
+    ctx.quadraticCurveTo(
+        x,
+        y,
+        x + radius,
+        y
+    );
+
+    ctx.closePath();
+}
+
+
+/* ========================================================
+   START
+======================================================== */
+
+loadAssets();
