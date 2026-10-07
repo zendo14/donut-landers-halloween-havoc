@@ -1,43 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
 
     <meta
         name="viewport"
-        content="width=device-width,
-        initial-scale=1.0,
-        maximum-scale=1.0,
-        user-scalable=no"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     >
 
-    <title>
-        The Donut Landers: Halloween Havoc
-    </title>
+    <meta name="theme-color" content="#000000">
 
-    <link
-        rel="stylesheet"
-        href="style.css"
-    >
+    <title>Donut Land: Killer Arts Media</title>
 
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-    <div id="game-container">
+    <main id="game-wrapper">
 
-        <canvas
-            id="gameCanvas"
-            width="1024"
-            height="576"
-        ></canvas>
+        <canvas id="gameCanvas"></canvas>
 
-    </div>
+        <div id="loading-screen">
+            <div>LOADING...</div>
+        </div>
+
+    </main>
 
     <script src="game.js"></script>
 
 </body>
-
 </html>
