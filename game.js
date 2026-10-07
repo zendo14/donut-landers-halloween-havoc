@@ -1,374 +1,2121 @@
-(() => {
-"use strict";
+// ============================================================
+// DONUT LANDERS: HALLOWEEN HAVOC
+// V1.1
+// Donut Land • Killer Arts Media • #ZTFILMS
+// ============================================================
 
-const canvas = document.getElementById("game");
+const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-const W = 540, H = 960;
-canvas.width = W; canvas.height = H;
 
-const $ = id => document.getElementById(id);
-const menu = $("menu"), gameOver = $("gameOver"), leaderboard = $("leaderboard");
-const hud = $("hud"), choices = $("characterChoices");
-const scoreEl = $("score"), levelEl = $("level"), multEl = $("multiplier");
+const CONFIG = {
+    width: 1024,
+    height: 576,
 
-const characters = [
-  {id:"sprinkles", name:"Sprinkles", file:"assets/characters/sprinkles.png"},
-  {id:"glaze", name:"Glaze", file:"assets/characters/glaze.png"},
-  {id:"chocolate", name:"Chocolate Von Donut", file:"assets/characters/chocolate.png"}
-];
+    gravity: 0.62,
+    jumpPower: -13,
 
-const levels = [
-  {name:"Donut Land", theme:"Halloween Shop", duration:35, speed:210, gap:1.35, obstacles:["coffee_cup","half_eaten_donut","donut_box"], collectibles:["candy"]},
-  {name:"Donut Land After Dark", theme:"Haunted Shop", duration:35, speed:245, gap:1.18, obstacles:["zombie_donut","coffee_cup","donut_garbage"], collectibles:["candy"]},
-  {name:"Haunted Bakery", theme:"Back Room", duration:35, speed:280, gap:1.05, obstacles:["zombie_donut","donut_box","half_eaten_donut","bat_donut"], collectibles:["candy"]},
-  {name:"Graveyard", theme:"Moonlit Graveyard", duration:35, speed:315, gap:.94, obstacles:["tombstone_donut","ghost_donut","zombie_donut"], collectibles:["candy","jack_o_lantern_donut"]},
-  {name:"Halloween Factory", theme:"Donut Factory", duration:40, speed:350, gap:.82, obstacles:["spider_donut","bat_donut","jack_o_lantern_donut","donut_garbage"], collectibles:["candy"]}
-];
+    baseSpeed: 5,
+    maxSpeed: 12,
 
-const objectData = {
-  zombie_donut:{w:72,h:72,points:20,kind:"obstacle"},
-  candy:{w:50,h:50,points:25,kind:"collectible"},
-  coffee_cup:{w:55,h:72,points:20,kind:"obstacle"},
-  half_eaten_donut:{w:68,h:68,points:25,kind:"obstacle"},
-  donut_box:{w:72,h:72,points:30,kind:"obstacle"},
-  donut_garbage:{w:76,h:70,points:35,kind:"obstacle"},
-  jack_o_lantern_donut:{w:72,h:72,points:60,kind:"collectible"},
-  ghost_donut:{w:68,h:72,points:35,kind:"obstacle"},
-  witch_donut:{w:70,h:74,points:50,kind:"collectible"},
-  bat_donut:{w:70,h:68,points:40,kind:"obstacle"},
-  tombstone_donut:{w:65,h:78,points:45,kind:"obstacle"},
-  spider_donut:{w:72,h:70,points:50,kind:"obstacle"}
+    groundY: 485,
+
+    levelDistance: 1200,
+
+    playerWidth: 58,
+    playerHeight: 58
 };
 
-const images = {};
-function loadImage(src){
-  return new Promise((resolve,reject)=>{
-    const im = new Image();
-    im.onload=()=>resolve(im);
-    im.onerror=reject;
-    im.src=src;
-  });
-}
+// ------------------------------------------------------------
+// ASSETS
+// ------------------------------------------------------------
 
-let selected = null;
-let state = "menu";
-let last = 0;
-let score = 0;
-let elapsed = 0;
-let levelIndex = 0;
-let multiplier = 1;
-let combo = 0;
-let spawnTimer = 0;
-let levelStartScore = 0;
-let bgOffset = 0;
-let obstacles = [];
-let particles = [];
-let player = {x:48,y:730,w:100,h:100,vy:0,onGround:true,jumpCount:0};
-let audioCtx = null;
-let musicAudio = null;
+const assets = {
+    logo: new Image(),
+    by: new Image(),
 
-function setupCharacters(){
-  choices.innerHTML = "";
-  characters.forEach(c=>{
-    const card=document.createElement("div");
-    card.className="character-card";
-    card.innerHTML=`<img src="${c.file}" alt="${c.name}"><span>${c.name}</span>`;
-    card.addEventListener("pointerdown",e=>{
-      e.preventDefault();
-      selected=c;
-      document.querySelectorAll(".character-card").forEach(x=>x.classList.remove("selected"));
-      card.classList.add("selected");
-      $("startBtn").disabled=false;
-      sfx("select");
-    });
-    choices.appendChild(card);
-  });
-}
+    backgrounds: [
+        new Image(),
+        new Image(),
+        new Image(),
+        new Image(),
+        new Image()
+    ],
 
-async function preload(){
-  const list = [
-    ...characters.map(c=>[c.id,c.file]),
-    ["bg","assets/backgrounds/BG.jpg"],
-    ...Object.keys(objectData).map(k=>[k,`assets/objects/${k}.png`])
-  ];
-  await Promise.all(list.map(async ([key,src])=>{
-    try{ images[key]=await loadImage(src); }catch(e){ console.warn("Missing asset:",src); }
-  }));
-}
+    menuMusic: new Audio("assets/music/menu.mp3"),
+    gameMusic: new Audio("assets/music/gamemusic.mp3")
+};
 
-function ensureAudio(){
-  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-  if(audioCtx.state==="suspended") audioCtx.resume();
-}
+assets.logo.src = "assets/logo.png";
+assets.by.src = "assets/by.png";
 
-function tone(freq,duration,type="sine",volume=.06,when=0){
-  ensureAudio();
-  const o=audioCtx.createOscillator(), g=audioCtx.createGain();
-  o.type=type;o.frequency.value=freq;
-  g.gain.setValueAtTime(0.0001,audioCtx.currentTime+when);
-  g.gain.exponentialRampToValueAtTime(volume,audioCtx.currentTime+when+.01);
-  g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+when+duration);
-  o.connect(g).connect(audioCtx.destination);
-  o.start(audioCtx.currentTime+when);o.stop(audioCtx.currentTime+when+duration+.02);
-}
-function sfx(name){
-  try{
-    const map={
-      select:()=>tone(520,.08,"triangle",.04),
-      jump:()=>{tone(440,.08,"square",.05);tone(660,.12,"square",.04,.06)},
-      land:()=>tone(120,.08,"sine",.05),
-      score:()=>{tone(700,.06,"triangle",.04);tone(900,.09,"triangle",.035,.06)},
-      high:()=>{tone(660,.08,"triangle",.05);tone(880,.08,"triangle",.05,.08);tone(1100,.16,"triangle",.05,.16)},
-      hit:()=>{tone(150,.2,"sawtooth",.08);tone(90,.25,"sawtooth",.05,.08)},
-      over:()=>{tone(260,.16,"sine",.06);tone(190,.22,"sine",.06,.16);tone(120,.3,"sine",.05,.34)},
-      button:()=>tone(350,.06,"triangle",.035),
-      level:()=>{tone(520,.1,"triangle",.05);tone(700,.1,"triangle",.05,.1);tone(900,.18,"triangle",.05,.2)}
+assets.backgrounds[0].src = "assets/backgrounds/BG.jpg";
+assets.backgrounds[1].src = "assets/backgrounds/BG2.jpg";
+assets.backgrounds[2].src = "assets/backgrounds/BG3.jpg";
+assets.backgrounds[3].src = "assets/backgrounds/BG4.jpg";
+assets.backgrounds[4].src = "assets/backgrounds/BG5.jpg";
+
+assets.menuMusic.loop = true;
+assets.gameMusic.loop = true;
+
+assets.menuMusic.volume = 0.65;
+assets.gameMusic.volume = 0.55;
+
+// ------------------------------------------------------------
+// GAME STATE
+// ------------------------------------------------------------
+
+let state = {
+    screen: "menu",
+
+    score: 0,
+    level: 1,
+
+    distance: 0,
+    backgroundX: 0,
+
+    gameRunning: false,
+
+    lastTime: 0,
+
+    obstacleTimer: 0,
+    obstacleInterval: 1100,
+
+    candyTimer: 0,
+
+    speed: CONFIG.baseSpeed,
+
+    obstacles: [],
+    collectibles: []
+};
+
+// ------------------------------------------------------------
+// PLAYER
+// ------------------------------------------------------------
+
+const player = {
+    x: 150,
+    y: CONFIG.groundY - CONFIG.playerHeight,
+
+    width: CONFIG.playerWidth,
+    height: CONFIG.playerHeight,
+
+    velocityY: 0,
+
+    grounded: true,
+
+    squash: 1,
+
+    jump() {
+
+        if (!this.grounded) return;
+
+        this.velocityY = CONFIG.jumpPower;
+        this.grounded = false;
+
+        this.squash = 0.85;
+    },
+
+    update(dt) {
+
+        this.velocityY += CONFIG.gravity * dt;
+
+        this.y += this.velocityY * dt;
+
+        const floor = CONFIG.groundY - this.height;
+
+        if (this.y >= floor) {
+
+            this.y = floor;
+
+            this.velocityY = 0;
+
+            this.grounded = true;
+
+            this.squash += (1 - this.squash) * 0.25;
+
+        } else {
+
+            this.grounded = false;
+
+            this.squash += (1 - this.squash) * 0.15;
+        }
+    },
+
+    draw() {
+
+        ctx.save();
+
+        const centerX = this.x + this.width / 2;
+        const bottomY = this.y + this.height;
+
+        ctx.translate(centerX, bottomY);
+
+        ctx.scale(1, this.squash);
+
+        // Donut body
+        ctx.beginPath();
+        ctx.arc(0, -30, 27, 0, Math.PI * 2);
+
+        ctx.fillStyle = "#d98a45";
+        ctx.fill();
+
+        // Frosting
+        ctx.beginPath();
+        ctx.arc(0, -34, 23, 0, Math.PI * 2);
+
+        ctx.fillStyle = "#f4b6d2";
+        ctx.fill();
+
+        // Donut hole
+        ctx.beginPath();
+        ctx.arc(0, -34, 7, 0, Math.PI * 2);
+
+        ctx.fillStyle = "#7a4326";
+        ctx.fill();
+
+        // Eyes
+        ctx.fillStyle = "#111";
+
+        ctx.beginPath();
+        ctx.arc(-8, -39, 3, 0, Math.PI * 2);
+        ctx.arc(8, -39, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Smile
+        ctx.beginPath();
+
+        ctx.arc(
+            0,
+            -34,
+            8,
+            0.15 * Math.PI,
+            0.85 * Math.PI
+        );
+
+        ctx.strokeStyle = "#111";
+        ctx.lineWidth = 2;
+
+        ctx.stroke();
+
+        ctx.restore();
+    }
+};
+
+// ------------------------------------------------------------
+// OBSTACLE TYPES
+// ------------------------------------------------------------
+
+const OBSTACLE_TYPES = [
+
+    {
+        type: "half_eaten_donut",
+        width: 58,
+        height: 45
+    },
+
+    {
+        type: "donut_piece",
+        width: 52,
+        height: 35
+    },
+
+    {
+        type: "coffee_spill",
+        width: 82,
+        height: 25
+    },
+
+    {
+        type: "coffee_cup",
+        width: 45,
+        height: 62
+    },
+
+    {
+        type: "white_coffee_mug",
+        width: 52,
+        height: 58
+    },
+
+    {
+        type: "donut_box",
+        width: 65,
+        height: 48
+    },
+
+    {
+        type: "open_donut_box",
+        width: 72,
+        height: 52
+    },
+
+    {
+        type: "bad_donut",
+        width: 58,
+        height: 48
+    },
+
+    {
+        type: "crushed_donut",
+        width: 65,
+        height: 32
+    },
+
+    {
+        type: "donut_garbage",
+        width: 68,
+        height: 58
+    },
+
+    {
+        type: "zombie_donut",
+        width: 62,
+        height: 62
+    },
+
+    {
+        type: "ghost_donut",
+        width: 60,
+        height: 65
+    },
+
+    {
+        type: "bat_donut",
+        width: 72,
+        height: 55
+    },
+
+    {
+        type: "tombstone",
+        width: 55,
+        height: 75
+    },
+
+    {
+        type: "skull",
+        width: 55,
+        height: 55
+    },
+
+    {
+        type: "spider",
+        width: 55,
+        height: 65
+    },
+
+    {
+        type: "spider_web",
+        width: 70,
+        height: 65
+    },
+
+    {
+        type: "candy",
+        width: 40,
+        height: 45
+    },
+
+    {
+        type: "jack_o_lantern_donut",
+        width: 62,
+        height: 60
+    },
+
+    {
+        type: "witch_donut",
+        width: 65,
+        height: 65
+    }
+];
+
+// ------------------------------------------------------------
+// OBSTACLE CREATION
+// ------------------------------------------------------------
+
+function createObstacle() {
+
+    const type =
+        OBSTACLE_TYPES[
+            Math.floor(Math.random() * OBSTACLE_TYPES.length)
+        ];
+
+    const obstacle = {
+
+        type: type.type,
+
+        x: CONFIG.width + 80,
+
+        y:
+            CONFIG.groundY -
+            type.height,
+
+        width: type.width,
+
+        height: type.height,
+
+        passed: false
     };
-    if(map[name])map[name]();
-  }catch(e){}
+
+    state.obstacles.push(obstacle);
 }
 
-function musicFileFor(kind){
-  if(kind==="title") return "assets/music/title-theme.mp3";
-  return `assets/music/level${levelIndex+1}.mp3`;
-}
-function stopMusic(){
-  if(musicAudio){musicAudio.pause();musicAudio.currentTime=0;musicAudio=null;}
-}
-function playMusic(kind){
-  stopMusic();
-  const a=new Audio(musicFileFor(kind));
-  a.loop=true;a.volume=.42;
-  a.play().catch(()=>{ $("musicHint").classList.remove("hidden"); });
-  a.addEventListener("error",()=>{ /* tracks are optional until supplied */ });
-  musicAudio=a;
+// ------------------------------------------------------------
+// COLLECTIBLES
+// ------------------------------------------------------------
+
+function createCandy() {
+
+    state.collectibles.push({
+
+        type: "candy",
+
+        x: CONFIG.width + 80,
+
+        y:
+            CONFIG.groundY -
+            130 -
+            Math.random() * 100,
+
+        width: 38,
+
+        height: 38,
+
+        collected: false
+    });
 }
 
-function getScores(){
-  try{return JSON.parse(localStorage.getItem("donutLandersScores")||"[]");}catch(e){return[]}
-}
-function saveScores(arr){localStorage.setItem("donutLandersScores",JSON.stringify(arr.slice(0,10)))}
-function qualifies(n){return getScores().length<10 || n>getScores()[getScores().length-1].score}
-function renderScores(){
-  const arr=getScores();
-  const el=$("scores");el.innerHTML="";
-  if(!arr.length){el.innerHTML="<li>No scores yet. Be the first!</li>";return}
-  arr.forEach((x,i)=>{const li=document.createElement("li");li.textContent=`${i+1}. ${x.name} — ${x.score.toLocaleString()}`;el.appendChild(li)});
-}
-function submitScore(){
-  const name=($("playerName").value||"YOU").trim().toUpperCase().slice(0,12);
-  const arr=getScores();
-  arr.push({name:name||"YOU",score:Math.floor(score),date:Date.now()});
-  arr.sort((a,b)=>b.score-a.score);saveScores(arr);
-  $("nameEntry").classList.add("hidden");$("notQualified").classList.add("hidden");
-  renderScores();sfx("high");
-}
+// ------------------------------------------------------------
+// COLLISION
+// ------------------------------------------------------------
 
-function startGame(){
-  if(!selected)return;
-  ensureAudio();sfx("button");
-  state="playing";menu.classList.add("hidden");gameOver.classList.add("hidden");leaderboard.classList.add("hidden");hud.classList.remove("hidden");
-  score=0;elapsed=0;levelIndex=0;multiplier=1;combo=0;spawnTimer=.8;bgOffset=0;obstacles=[];particles=[];
-  player={x:48,y:720,w:100,h:100,vy:0,onGround:true,jumpCount:0};
-  levelStartScore=0; updateHud(); playMusic("level");
-  last=performance.now(); requestAnimationFrame(loop);
+function collision(a, b) {
+
+    const padding = 8;
+
+    return (
+
+        a.x + padding <
+        b.x + b.width - padding &&
+
+        a.x + a.width - padding >
+        b.x + padding &&
+
+        a.y + padding <
+        b.y + b.height - padding &&
+
+        a.y + a.height - padding >
+        b.y + padding
+    );
 }
 
-function jump(){
-  if(state!=="playing")return;
-  ensureAudio();
-  if(player.onGround){
-    player.vy=-820;player.onGround=false;player.jumpCount++;
-    sfx("jump");
-  }
-}
+// ------------------------------------------------------------
+// LEVEL SYSTEM
+// ------------------------------------------------------------
 
-function spawnObject(){
-  const L=levels[levelIndex];
-  const pool=Math.random()<.78?L.obstacles:L.collectibles;
-  const type=pool[Math.floor(Math.random()*pool.length)];
-  const d=objectData[type];
-  const scale=.82+Math.random()*.22;
-  const groundY=820;
-  const isCollect=d.kind==="collectible";
-  const y=isCollect?groundY-70-(Math.random()<.35?55:0):groundY-d.h;
-  obstacles.push({type,x:W+40,y,w:d.w*scale,h:d.h*scale,kind:d.kind,points:d.points,passed:false,angle:0});
-}
+function updateLevel() {
 
-function update(dt){
-  elapsed+=dt;
-  const L=levels[levelIndex];
-  const progress=Math.min(1,elapsed/L.duration);
-  const speed=L.speed + progress*55 + levelIndex*16;
-  bgOffset += speed*dt*.18;
-  spawnTimer-=dt;
-  if(spawnTimer<=0){
-    spawnObject();
-    const variance=(Math.random()-.5)*.28;
-    spawnTimer=Math.max(.55,L.gap+variance-(elapsed/L.duration)*.25);
-  }
+    const newLevel =
+        Math.min(
+            5,
+            Math.floor(state.distance / CONFIG.levelDistance) + 1
+        );
 
-  player.vy += 1900*dt;
-  player.y += player.vy*dt;
-  const ground=820-player.h;
-  if(player.y>=ground){
-    if(!player.onGround && player.vy>100)sfx("land");
-    player.y=ground;player.vy=0;player.onGround=true;
-  }
+    if (newLevel !== state.level) {
 
-  obstacles.forEach(o=>{
-    o.x-=speed*dt;
-    if(o.kind==="collectible") o.y += Math.sin((elapsed+o.x)*.01)*.2;
-    if(!o.passed && o.x+o.w<player.x){
-      o.passed=true;
-      if(o.kind==="obstacle"){
-        combo++;multiplier=combo>=5?3:combo>=3?2:1;
-        score+=15*multiplier;sfx("score");burst(o.x,o.y,6);
-      }
+        state.level = newLevel;
+
+        state.speed =
+            Math.min(
+                CONFIG.maxSpeed,
+                CONFIG.baseSpeed +
+                (state.level - 1) * 1.25
+            );
+
+        state.obstacleInterval =
+            Math.max(
+                650,
+                1100 -
+                (state.level - 1) * 80
+            );
     }
-  });
+}
 
-  // collisions
-  for(let i=obstacles.length-1;i>=0;i--){
-    const o=obstacles[i];
-    if(o.x+o.w< -80){obstacles.splice(i,1);continue}
-    if(hitbox(player,o)){
-      if(o.kind==="collectible"){
-        score+=o.points*multiplier;sfx("score");burst(o.x,o.y,12);obstacles.splice(i,1);
-      }else{
-        gameEnd();return;
-      }
+// ------------------------------------------------------------
+// BACKGROUND
+// ------------------------------------------------------------
+
+function drawBackground() {
+
+    const image =
+        assets.backgrounds[state.level - 1];
+
+    if (!image.complete || !image.naturalWidth) {
+
+        ctx.fillStyle = "#111";
+        ctx.fillRect(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+        return;
     }
-  }
 
-  score += dt*10*(1+levelIndex*.15);
-  if(Math.floor(elapsed)%10===0 && Math.random()<dt) sfx("score");
+    const scale =
+        canvas.height /
+        image.naturalHeight;
 
-  if(elapsed>=L.duration){
-    if(levelIndex<levels.length-1){
-      score+=250*(levelIndex+1);
-      levelIndex++;elapsed=0;spawnTimer=.7;multiplier=1;combo=0;obstacles=[];sfx("level");playMusic("level");
-    }else{
-      // endless final level: keep escalating
-      elapsed=0;levelIndex=4;spawnTimer=.6;score+=500;sfx("level");
+    const width =
+        image.naturalWidth * scale;
+
+    let x =
+        -state.backgroundX % width;
+
+    while (x < canvas.width) {
+
+        ctx.drawImage(
+            image,
+            x,
+            0,
+            width,
+            canvas.height
+        );
+
+        x += width;
     }
-  }
-  updateHud();
-  particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=500*dt;p.life-=dt});
-  particles=particles.filter(p=>p.life>0);
 }
 
-function hitbox(a,b){
-  const ax=a.x+20, ay=a.y+18, aw=a.w-40, ah=a.h-20;
-  const bx=b.x+8, by=b.y+8, bw=b.w-16, bh=b.h-12;
-  return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by;
-}
-function burst(x,y,n){
-  for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*160,vy:-Math.random()*180,life:.4+Math.random()*.4});
-}
-function updateHud(){
-  scoreEl.textContent=Math.floor(score).toLocaleString();
-  levelEl.textContent=String(levelIndex+1);
-  multEl.textContent=String(multiplier);
+// ------------------------------------------------------------
+// DRAW OBSTACLES
+// ------------------------------------------------------------
+
+function drawObstacle(o) {
+
+    ctx.save();
+
+    ctx.translate(o.x, o.y);
+
+    switch (o.type) {
+
+        case "half_eaten_donut":
+            drawHalfDonut(o);
+            break;
+
+        case "donut_piece":
+            drawDonutPiece(o);
+            break;
+
+        case "coffee_spill":
+            drawCoffeeSpill(o);
+            break;
+
+        case "coffee_cup":
+            drawCoffeeCup(o);
+            break;
+
+        case "white_coffee_mug":
+            drawWhiteMug(o);
+            break;
+
+        case "donut_box":
+            drawDonutBox(o);
+            break;
+
+        case "open_donut_box":
+            drawOpenDonutBox(o);
+            break;
+
+        case "bad_donut":
+            drawBadDonut(o);
+            break;
+
+        case "crushed_donut":
+            drawCrushedDonut(o);
+            break;
+
+        case "donut_garbage":
+            drawDonutGarbage(o);
+            break;
+
+        case "zombie_donut":
+            drawZombieDonut(o);
+            break;
+
+        case "ghost_donut":
+            drawGhostDonut(o);
+            break;
+
+        case "bat_donut":
+            drawBatDonut(o);
+            break;
+
+        case "tombstone":
+            drawTombstone(o);
+            break;
+
+        case "skull":
+            drawSkull(o);
+            break;
+
+        case "spider":
+            drawSpider(o);
+            break;
+
+        case "spider_web":
+            drawSpiderWeb(o);
+            break;
+
+        case "candy":
+            drawCandy(o);
+            break;
+
+        case "jack_o_lantern_donut":
+            drawJackOLantern(o);
+            break;
+
+        case "witch_donut":
+            drawWitchDonut(o);
+            break;
+    }
+
+    ctx.restore();
 }
 
-function draw(){
-  ctx.clearRect(0,0,W,H);
-  drawBackground();
-  drawObjects();
-  drawPlayer();
-  drawParticles();
-}
-function drawBackground(){
-  const im=images.bg;
-  if(!im){ctx.fillStyle="#2b1739";ctx.fillRect(0,0,W,H);return}
-  // Portrait cover crop: keep the countertop visible near the bottom.
-  const scale=Math.max(W/im.width,H/im.height)*1.04;
-  const dw=im.width*scale, dh=im.height*scale;
-  const maxX=Math.max(0,dw-W);
-  const x=-(bgOffset%(maxX||1));
-  const y=H-dh;
-  ctx.drawImage(im,x,y,dw,dh);
-  const overlays=["rgba(255,120,40,0.02)","rgba(55,20,120,0.18)","rgba(35,10,55,0.24)","rgba(20,20,70,0.34)","rgba(110,25,90,0.22)"];
-  ctx.fillStyle=overlays[levelIndex]||overlays[0];
-  ctx.fillRect(0,0,W,H);
-  // Ground strip makes the running lane clear even when background art is cropped.
-  ctx.fillStyle="rgba(65,22,18,.35)";
-  ctx.fillRect(0,820,W,H-820);
-}
-function drawObjects(){
-  obstacles.forEach(o=>{
-    const im=images[o.type];
-    if(!im)return;
-    ctx.drawImage(im,o.x,o.y,o.w,o.h);
-  });
-}
-function drawPlayer(){
-  const im=images[selected?.id];
-  if(!im)return;
-  const bob=player.onGround?Math.sin(performance.now()*.012)*2:0;
-  ctx.drawImage(im,player.x,player.y+bob,player.w,player.h);
-}
-function drawParticles(){
-  ctx.save();
-  particles.forEach(p=>{
-    ctx.globalAlpha=Math.max(0,p.life*2);
-    ctx.fillStyle="#ffb42e";
-    ctx.fillRect(p.x,p.y,5,5);
-  });
-  ctx.restore();
+// ------------------------------------------------------------
+// DONUT SHOP ART
+// ------------------------------------------------------------
+
+function drawHalfDonut(o) {
+
+    ctx.fillStyle = "#d68a42";
+
+    ctx.beginPath();
+    ctx.arc(
+        o.width / 2,
+        o.height / 2,
+        24,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#f3a8c6";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        o.height / 2 - 3,
+        19,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#111";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2 + 18,
+        o.height / 2 - 18,
+        9,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
 }
 
-function gameEnd(){
-  state="gameover";hud.classList.add("hidden");stopMusic();sfx("hit");setTimeout(()=>sfx("over"),80);
-  $("finalScore").textContent=Math.floor(score).toLocaleString();
-  $("finalLevel").textContent=`Reached ${levels[levelIndex].name}`;
-  const q=qualifies(Math.floor(score));
-  $("nameEntry").classList.toggle("hidden",!q);
-  $("notQualified").classList.toggle("hidden",q);
-  $("playAgainBtn").classList.remove("hidden");
-  gameOver.classList.remove("hidden");
-  if(q){$("playerName").value="";setTimeout(()=>$("playerName").focus(),100)}
+function drawDonutPiece(o) {
+
+    ctx.fillStyle = "#d88b46";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        o.height / 2,
+        22,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#f5b5cf";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        o.height / 2,
+        14,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
 }
 
-function openLeaderboard(){
-  renderScores();leaderboard.classList.remove("hidden");
+function drawCoffeeSpill(o) {
+
+    ctx.fillStyle = "#5a321f";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        o.width / 2,
+        o.height / 2,
+        o.width / 2,
+        o.height / 2.7,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#8a5736";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        o.width / 2 - 10,
+        o.height / 2 - 3,
+        15,
+        5,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
 }
-function closeLeaderboard(){leaderboard.classList.add("hidden")}
 
-canvas.addEventListener("pointerdown",e=>{
-  e.preventDefault();
-  if(state==="playing")jump();
-});
-window.addEventListener("keydown",e=>{
-  if(e.code==="Space"||e.code==="ArrowUp"){e.preventDefault();jump();}
-});
+function drawCoffeeCup(o) {
 
-$("startBtn").addEventListener("pointerdown",e=>{e.preventDefault();startGame()});
-$("leaderboardBtn").addEventListener("pointerdown",e=>{e.preventDefault();sfx("button");openLeaderboard()});
-$("gameOverLeaderboardBtn").addEventListener("pointerdown",e=>{e.preventDefault();sfx("button");openLeaderboard()});
-$("closeLeaderboardBtn").addEventListener("pointerdown",e=>{e.preventDefault();sfx("button");closeLeaderboard()});
-$("saveScoreBtn").addEventListener("pointerdown",e=>{e.preventDefault();submitScore()});
-$("playAgainBtn").addEventListener("pointerdown",e=>{e.preventDefault();startGame()});
-$("menuBtn").addEventListener("pointerdown",e=>{
-  e.preventDefault();sfx("button");gameOver.classList.add("hidden");menu.classList.remove("hidden");state="menu";playMusic("title");
-});
+    ctx.fillStyle = "#c66b32";
 
-$("musicHint").addEventListener("pointerdown",()=>{ensureAudio();playMusic(state==="menu"?"title":"level");$("musicHint").classList.add("hidden")});
+    ctx.fillRect(
+        7,
+        12,
+        o.width - 14,
+        o.height - 16
+    );
 
-function loop(t){
-  if(state!=="playing"){draw();return}
-  const dt=Math.min(.033,(t-last)/1000);last=t;
-  update(dt);draw();requestAnimationFrame(loop);
+    ctx.fillStyle = "#5a321f";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        o.width / 2,
+        13,
+        18,
+        7,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.strokeStyle = "#c66b32";
+    ctx.lineWidth = 6;
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width - 5,
+        34,
+        12,
+        -Math.PI / 2,
+        Math.PI / 2
+    );
+
+    ctx.stroke();
 }
 
-(async function init(){
-  setupCharacters();
-  await preload();
-  renderScores();
-  state="menu";
-  draw();
-  // Browser autoplay rules may block title music until a user gesture.
-  document.addEventListener("pointerdown",()=>{ if(state==="menu"){ensureAudio();playMusic("title");$("musicHint").classList.add("hidden");} },{once:true});
-})();
-})();
+function drawWhiteMug(o) {
+
+    ctx.fillStyle = "#f4f4f4";
+
+    ctx.fillRect(
+        7,
+        14,
+        o.width - 18,
+        o.height - 17
+    );
+
+    ctx.fillStyle = "#432719";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        o.width / 2 - 2,
+        14,
+        18,
+        6,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.strokeStyle = "#f4f4f4";
+    ctx.lineWidth = 6;
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width - 7,
+        36,
+        12,
+        -Math.PI / 2,
+        Math.PI / 2
+    );
+
+    ctx.stroke();
+}
+
+function drawDonutBox(o) {
+
+    ctx.fillStyle = "#d79a52";
+
+    ctx.fillRect(
+        4,
+        15,
+        o.width - 8,
+        o.height - 15
+    );
+
+    ctx.strokeStyle = "#7c421f";
+    ctx.lineWidth = 3;
+
+    ctx.strokeRect(
+        4,
+        15,
+        o.width - 8,
+        o.height - 15
+    );
+
+    ctx.fillStyle = "#f5d28c";
+
+    ctx.fillRect(
+        10,
+        21,
+        o.width - 20,
+        8
+    );
+}
+
+function drawOpenDonutBox(o) {
+
+    ctx.fillStyle = "#e5b36a";
+
+    ctx.fillRect(
+        5,
+        22,
+        o.width - 10,
+        o.height - 22
+    );
+
+    ctx.strokeStyle = "#7c421f";
+    ctx.lineWidth = 3;
+
+    ctx.strokeRect(
+        5,
+        22,
+        o.width - 10,
+        o.height - 22
+    );
+
+    ctx.fillStyle = "#f5b6cf";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        37,
+        12,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+}
+
+function drawBadDonut(o) {
+
+    ctx.fillStyle = "#65402d";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        o.height / 2,
+        23,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#333";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        o.height / 2,
+        8,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#e85b42";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        18,
+        20,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.arc(
+        39,
+        28,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+}
+
+function drawCrushedDonut(o) {
+
+    ctx.fillStyle = "#9d5e35";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        o.width / 2,
+        o.height / 2,
+        o.width / 2,
+        o.height / 2.2,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#e99fc0";
+
+    ctx.fillRect(
+        10,
+        12,
+        o.width - 20,
+        7
+    );
+}
+
+function drawDonutGarbage(o) {
+
+    ctx.fillStyle = "#727272";
+
+    ctx.fillRect(
+        10,
+        15,
+        o.width - 20,
+        o.height - 15
+    );
+
+    ctx.fillStyle = "#d98245";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        27,
+        20,
+        13,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#f4b0ca";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        48,
+        30,
+        12,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+}
+
+// ------------------------------------------------------------
+// HALLOWEEN ART
+// ------------------------------------------------------------
+
+function drawZombieDonut(o) {
+
+    ctx.fillStyle = "#718f54";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        o.height / 2,
+        27,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#6a4b36";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        o.height / 2,
+        8,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#111";
+
+    ctx.fillRect(15, 18, 7, 7);
+    ctx.fillRect(39, 18, 7, 7);
+
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.moveTo(18, 43);
+    ctx.lineTo(43, 43);
+
+    ctx.stroke();
+}
+
+function drawGhostDonut(o) {
+
+    ctx.fillStyle = "rgba(245,245,255,0.95)";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        27,
+        25,
+        Math.PI,
+        0
+    );
+
+    ctx.lineTo(
+        o.width - 8,
+        o.height - 10
+    );
+
+    ctx.lineTo(
+        o.width - 20,
+        o.height - 20
+    );
+
+    ctx.lineTo(
+        o.width / 2,
+        o.height - 8
+    );
+
+    ctx.lineTo(
+        20,
+        o.height - 20
+    );
+
+    ctx.lineTo(
+        8,
+        o.height - 10
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+    ctx.fillStyle = "#111";
+
+    ctx.beginPath();
+
+    ctx.arc(23, 28, 4, 0, Math.PI * 2);
+    ctx.arc(39, 28, 4, 0, Math.PI * 2);
+
+    ctx.fill();
+}
+
+function drawBatDonut(o) {
+
+    ctx.fillStyle = "#21152b";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        31,
+        20,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.beginPath();
+
+    ctx.moveTo(25, 25);
+    ctx.lineTo(3, 10);
+    ctx.lineTo(8, 36);
+    ctx.lineTo(25, 32);
+
+    ctx.fill();
+
+    ctx.beginPath();
+
+    ctx.moveTo(47, 25);
+    ctx.lineTo(69, 10);
+    ctx.lineTo(64, 36);
+    ctx.lineTo(47, 32);
+
+    ctx.fill();
+
+    ctx.fillStyle = "#e95c54";
+
+    ctx.beginPath();
+
+    ctx.arc(25, 28, 3, 0, Math.PI * 2);
+    ctx.arc(47, 28, 3, 0, Math.PI * 2);
+
+    ctx.fill();
+}
+
+function drawTombstone(o) {
+
+    ctx.fillStyle = "#727272";
+
+    ctx.beginPath();
+
+    ctx.moveTo(7, o.height);
+
+    ctx.lineTo(7, 22);
+
+    ctx.quadraticCurveTo(
+        o.width / 2,
+        0,
+        o.width - 7,
+        22
+    );
+
+    ctx.lineTo(
+        o.width - 7,
+        o.height
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+    ctx.fillStyle = "#252525";
+
+    ctx.font = "bold 20px Arial";
+
+    ctx.textAlign = "center";
+
+    ctx.fillText(
+        "RIP",
+        o.width / 2,
+        45
+    );
+}
+
+function drawSkull(o) {
+
+    ctx.fillStyle = "#eee";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        23,
+        21,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillRect(
+        17,
+        30,
+        22,
+        17
+    );
+
+    ctx.fillStyle = "#111";
+
+    ctx.beginPath();
+
+    ctx.arc(21, 23, 6, 0, Math.PI * 2);
+    ctx.arc(35, 23, 6, 0, Math.PI * 2);
+
+    ctx.fill();
+
+    ctx.beginPath();
+
+    ctx.moveTo(28, 28);
+    ctx.lineTo(24, 34);
+    ctx.lineTo(32, 34);
+
+    ctx.fill();
+}
+
+function drawSpider(o) {
+
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 4;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        o.width / 2,
+        0
+    );
+
+    ctx.lineTo(
+        o.width / 2,
+        17
+    );
+
+    ctx.stroke();
+
+    ctx.fillStyle = "#171717";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        36,
+        15,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.strokeStyle = "#171717";
+
+    for (let i = 0; i < 4; i++) {
+
+        const y = 23 + i * 9;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            o.width / 2 - 8,
+            y
+        );
+
+        ctx.lineTo(
+            2,
+            y - 10
+        );
+
+        ctx.moveTo(
+            o.width / 2 + 8,
+            y
+        );
+
+        ctx.lineTo(
+            o.width - 2,
+            y - 10
+        );
+
+        ctx.stroke();
+    }
+}
+
+function drawSpiderWeb(o) {
+
+    ctx.strokeStyle = "#ddd";
+    ctx.lineWidth = 2;
+
+    const cx = o.width / 2;
+    const cy = o.height / 2;
+
+    for (let i = 0; i < 8; i++) {
+
+        const angle =
+            i *
+            Math.PI /
+            4;
+
+        ctx.beginPath();
+
+        ctx.moveTo(cx, cy);
+
+        ctx.lineTo(
+            cx +
+            Math.cos(angle) * 35,
+
+            cy +
+            Math.sin(angle) * 35
+        );
+
+        ctx.stroke();
+    }
+
+    for (let r = 10; r <= 30; r += 10) {
+
+        ctx.beginPath();
+
+        ctx.arc(
+            cx,
+            cy,
+            r,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.stroke();
+    }
+}
+
+function drawCandy(o) {
+
+    ctx.fillStyle = "#ff6f91";
+
+    ctx.beginPath();
+
+    ctx.roundRect(
+        8,
+        10,
+        24,
+        22,
+        6
+    );
+
+    ctx.fill();
+
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.moveTo(8, 14);
+    ctx.lineTo(1, 7);
+
+    ctx.moveTo(32, 14);
+    ctx.lineTo(39, 7);
+
+    ctx.stroke();
+}
+
+function drawJackOLantern(o) {
+
+    ctx.fillStyle = "#ed782d";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        o.height / 2,
+        27,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#111";
+
+    ctx.beginPath();
+
+    ctx.moveTo(15, 27);
+    ctx.lineTo(25, 23);
+    ctx.lineTo(22, 34);
+
+    ctx.fill();
+
+    ctx.beginPath();
+
+    ctx.moveTo(39, 23);
+    ctx.lineTo(49, 27);
+    ctx.lineTo(42, 34);
+
+    ctx.fill();
+
+    ctx.fillRect(
+        21,
+        39,
+        20,
+        4
+    );
+}
+
+function drawWitchDonut(o) {
+
+    ctx.fillStyle = "#9d68bd";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        o.width / 2,
+        39,
+        21,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#20152d";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        12,
+        28
+    );
+
+    ctx.lineTo(
+        32,
+        2
+    );
+
+    ctx.lineTo(
+        53,
+        28
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+    ctx.fillStyle = "#e0a73a";
+
+    ctx.fillRect(
+        8,
+        27,
+        48,
+        6
+    );
+}
+
+// ------------------------------------------------------------
+// COLLECTIBLE DRAWING
+// ------------------------------------------------------------
+
+function drawCollectible(c) {
+
+    drawCandy(c);
+}
+
+// ------------------------------------------------------------
+// UPDATE OBSTACLES
+// ------------------------------------------------------------
+
+function updateObstacles(dt) {
+
+    state.obstacleTimer += dt * 16.67;
+
+    if (
+        state.obstacleTimer >
+        state.obstacleInterval
+    ) {
+
+        createObstacle();
+
+        state.obstacleTimer = 0;
+    }
+
+    for (let i = state.obstacles.length - 1; i >= 0; i--) {
+
+        const o = state.obstacles[i];
+
+        o.x -= state.speed * dt;
+
+        if (!o.passed && o.x + o.width < player.x) {
+
+            o.passed = true;
+
+            state.score += 10;
+        }
+
+        if (collision(player, o)) {
+
+            endGame();
+
+            return;
+        }
+
+        if (o.x + o.width < -100) {
+
+            state.obstacles.splice(i, 1);
+        }
+    }
+}
+
+// ------------------------------------------------------------
+// UPDATE COLLECTIBLES
+// ------------------------------------------------------------
+
+function updateCollectibles(dt) {
+
+    state.candyTimer += dt * 16.67;
+
+    if (state.candyTimer > 1600) {
+
+        createCandy();
+
+        state.candyTimer = 0;
+    }
+
+    for (
+        let i = state.collectibles.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const c = state.collectibles[i];
+
+        c.x -= state.speed * dt;
+
+        if (collision(player, c)) {
+
+            state.score += 25;
+
+            state.collectibles.splice(i, 1);
+
+            continue;
+        }
+
+        if (c.x + c.width < -50) {
+
+            state.collectibles.splice(i, 1);
+        }
+    }
+}
+
+// ------------------------------------------------------------
+// GAME UPDATE
+// ------------------------------------------------------------
+
+function update(dt) {
+
+    if (!state.gameRunning) return;
+
+    player.update(dt);
+
+    updateObstacles(dt);
+
+    updateCollectibles(dt);
+
+    state.distance += state.speed * dt;
+
+    state.backgroundX +=
+        state.speed * dt;
+
+    updateLevel();
+
+    state.score +=
+        Math.floor(state.speed * dt);
+}
+
+// ------------------------------------------------------------
+// GAME DRAW
+// ------------------------------------------------------------
+
+function drawGame() {
+
+    drawBackground();
+
+    // Ground shadow
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+
+    ctx.fillRect(
+        0,
+        CONFIG.groundY,
+        canvas.width,
+        canvas.height -
+        CONFIG.groundY
+    );
+
+    // Collectibles
+    for (const c of state.collectibles) {
+
+        ctx.save();
+
+        ctx.translate(
+            c.x,
+            c.y
+        );
+
+        drawCollectible(c);
+
+        ctx.restore();
+    }
+
+    // Obstacles
+    for (const o of state.obstacles) {
+
+        drawObstacle(o);
+    }
+
+    player.draw();
+
+    drawHUD();
+}
+
+// ------------------------------------------------------------
+// HUD
+// ------------------------------------------------------------
+
+function drawHUD() {
+
+    ctx.save();
+
+    ctx.fillStyle =
+        "rgba(0,0,0,0.55)";
+
+    ctx.fillRect(
+        15,
+        15,
+        235,
+        78
+    );
+
+    ctx.fillStyle = "#fff";
+
+    ctx.font =
+        "bold 20px Arial";
+
+    ctx.textAlign = "left";
+
+    ctx.fillText(
+        "SCORE: " +
+        state.score,
+        30,
+        43
+    );
+
+    ctx.fillText(
+        "LEVEL: " +
+        state.level,
+        30,
+        70
+    );
+
+    ctx.restore();
+}
+
+// ------------------------------------------------------------
+// MENU
+// ------------------------------------------------------------
+
+function drawMenu() {
+
+    ctx.fillStyle = "#090909";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    // Logo
+    if (
+        assets.logo.complete &&
+        assets.logo.naturalWidth
+    ) {
+
+        const maxWidth = 570;
+
+        const scale =
+            Math.min(
+                1,
+                maxWidth /
+                assets.logo.naturalWidth
+            );
+
+        const w =
+            assets.logo.naturalWidth *
+            scale;
+
+        const h =
+            assets.logo.naturalHeight *
+            scale;
+
+        const float =
+            Math.sin(
+                performance.now() / 700
+            ) * 8;
+
+        ctx.drawImage(
+            assets.logo,
+            canvas.width / 2 - w / 2,
+            65 + float,
+            w,
+            h
+        );
+
+    } else {
+
+        ctx.fillStyle = "#fff";
+
+        ctx.font =
+            "bold 60px Arial";
+
+        ctx.textAlign = "center";
+
+        ctx.fillText(
+            "DONUT LAND",
+            canvas.width / 2,
+            170
+        );
+    }
+
+    // Start button
+    ctx.fillStyle = "#d58a42";
+
+    ctx.roundRect(
+        canvas.width / 2 - 145,
+        350,
+        290,
+        70,
+        15
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#fff";
+
+    ctx.font =
+        "bold 28px Arial";
+
+    ctx.textAlign = "center";
+
+    ctx.fillText(
+        "TAP TO PLAY",
+        canvas.width / 2,
+        394
+    );
+
+    // Creator graphic
+    if (
+        assets.by.complete &&
+        assets.by.naturalWidth
+    ) {
+
+        const w = 330;
+
+        const h =
+            assets.by.naturalHeight *
+            (w /
+            assets.by.naturalWidth);
+
+        ctx.drawImage(
+            assets.by,
+            canvas.width / 2 - w / 2,
+            445,
+            w,
+            h
+        );
+    }
+
+    ctx.fillStyle = "#aaa";
+
+    ctx.font =
+        "14px Arial";
+
+    ctx.fillText(
+        "All rights reserved Donut Land, Killer Arts Media and #ZTFILMS | V1.1",
+        canvas.width / 2,
+        555
+    );
+}
+
+// ------------------------------------------------------------
+// GAME OVER
+// ------------------------------------------------------------
+
+function drawGameOver() {
+
+    drawGame();
+
+    ctx.fillStyle =
+        "rgba(0,0,0,0.72)";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    ctx.fillStyle = "#fff";
+
+    ctx.textAlign = "center";
+
+    ctx.font =
+        "bold 58px Arial";
+
+    ctx.fillText(
+        "GAME OVER",
+        canvas.width / 2,
+        190
+    );
+
+    ctx.font =
+        "bold 28px Arial";
+
+    ctx.fillText(
+        "SCORE: " +
+        state.score,
+        canvas.width / 2,
+        245
+    );
+
+    ctx.fillStyle = "#d58a42";
+
+    ctx.roundRect(
+        canvas.width / 2 - 145,
+        320,
+        290,
+        65,
+        15
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle = "#fff";
+
+    ctx.fillText(
+        "TAP TO TRY AGAIN",
+        canvas.width / 2,
+        362
+    );
+}
+
+// ------------------------------------------------------------
+// START GAME
+// ------------------------------------------------------------
+
+function startGame() {
+
+    state.screen = "game";
+
+    state.score = 0;
+
+    state.level = 1;
+
+    state.distance = 0;
+
+    state.backgroundX = 0;
+
+    state.speed =
+        CONFIG.baseSpeed;
+
+    state.obstacles = [];
+
+    state.collectibles = [];
+
+    state.obstacleTimer = 0;
+
+    state.candyTimer = 0;
+
+    player.x = 150;
+
+    player.y =
+        CONFIG.groundY -
+        player.height;
+
+    player.velocityY = 0;
+
+    player.grounded = true;
+
+    state.gameRunning = true;
+
+    assets.menuMusic.pause();
+
+    assets.menuMusic.currentTime = 0;
+
+    assets.gameMusic.currentTime = 0;
+
+    assets.gameMusic.play()
+        .catch(() => {});
+}
+
+// ------------------------------------------------------------
+// GAME OVER
+// ------------------------------------------------------------
+
+function endGame() {
+
+    state.gameRunning = false;
+
+    state.screen = "gameover";
+
+    assets.gameMusic.pause();
+
+    assets.gameMusic.currentTime = 0;
+}
+
+// ------------------------------------------------------------
+// RETURN TO MENU
+// ------------------------------------------------------------
+
+function returnToMenu() {
+
+    state.screen = "menu";
+
+    state.gameRunning = false;
+
+    assets.gameMusic.pause();
+
+    assets.gameMusic.currentTime = 0;
+
+    assets.menuMusic.play()
+        .catch(() => {});
+}
+
+// ------------------------------------------------------------
+// INPUT
+// ------------------------------------------------------------
+
+function handleInput() {
+
+    if (state.screen === "menu") {
+
+        startGame();
+
+        return;
+    }
+
+    if (state.screen === "game") {
+
+        player.jump();
+
+        return;
+    }
+
+    if (state.screen === "gameover") {
+
+        startGame();
+
+        return;
+    }
+}
+
+// Mouse
+canvas.addEventListener(
+    "mousedown",
+    handleInput
+);
+
+// Touch / iPhone / Android
+canvas.addEventListener(
+    "touchstart",
+    function(e) {
+
+        e.preventDefault();
+
+        handleInput();
+
+    },
+    {
+        passive: false
+    }
+);
+
+// Keyboard remains available on desktop
+window.addEventListener(
+    "keydown",
+    function(e) {
+
+        if (
+            e.code === "Space" ||
+            e.code === "ArrowUp"
+        ) {
+
+            e.preventDefault();
+
+            handleInput();
+        }
+    }
+);
+
+// ------------------------------------------------------------
+// AUDIO START
+// ------------------------------------------------------------
+
+// Mobile browsers generally require audio to begin after
+// a user interaction.
+
+document.addEventListener(
+    "touchstart",
+    function startAudio() {
+
+        if (state.screen === "menu") {
+
+            assets.menuMusic.play()
+                .catch(() => {});
+        }
+
+        document.removeEventListener(
+            "touchstart",
+            startAudio
+        );
+    },
+    {
+        once: true
+    }
+);
+
+document.addEventListener(
+    "click",
+    function startMenuAudio() {
+
+        if (state.screen === "menu") {
+
+            assets.menuMusic.play()
+                .catch(() => {});
+        }
+
+    }
+);
+
+// ------------------------------------------------------------
+// RESPONSIVE CANVAS
+// ------------------------------------------------------------
+
+function resizeCanvas() {
+
+    const ratio =
+        CONFIG.width /
+        CONFIG.height;
+
+    let width =
+        window.innerWidth;
+
+    let height =
+        window.innerHeight;
+
+    if (width / height > ratio) {
+
+        width =
+            height * ratio;
+
+    } else {
+
+        height =
+            width / ratio;
+    }
+
+    canvas.style.width =
+        width + "px";
+
+    canvas.style.height =
+        height + "px";
+}
+
+window.addEventListener(
+    "resize",
+    resizeCanvas
+);
+
+resizeCanvas();
+
+// ------------------------------------------------------------
+// MAIN LOOP
+// ------------------------------------------------------------
+
+function gameLoop(timestamp) {
+
+    if (!state.lastTime) {
+
+        state.lastTime = timestamp;
+    }
+
+    let dt =
+        (timestamp -
+        state.lastTime) /
+        16.67;
+
+    state.lastTime = timestamp;
+
+    // Prevent huge jumps after tab switching
+    dt =
+        Math.min(
+            dt,
+            2
+        );
+
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    if (
+        state.screen === "menu"
+    ) {
+
+        drawMenu();
+
+    } else if (
+        state.screen === "game"
+    ) {
+
+        update(dt);
+
+        drawGame();
+
+    } else if (
+        state.screen === "gameover"
+    ) {
+
+        drawGameOver();
+    }
+
+    requestAnimationFrame(
+        gameLoop
+    );
+}
+
+// ------------------------------------------------------------
+// START
+// ------------------------------------------------------------
+
+requestAnimationFrame(
+    gameLoop
+);
