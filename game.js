@@ -4,18 +4,14 @@ DONUT LAND: KILLER ARTS MEDIA
 Portrait Mobile Runner
 ===========================================================
 
-- Portrait gameplay
-- Tap to jump
+- Portrait mobile game
+- Touch/tap to jump
 - Character selection
-- Sprinkles
-- Glaze
-- Chocolate Von Donut
-- Original BG.jpg repeating background
-- Menu music
-- Gameplay music
-- Existing obstacle images
-- Logo / by graphic
-- Local high score
+- Original Web Audio SFX
+- Music
+- Original repeating BG.jpg
+- Obstacles
+- High score
 ===========================================================
 */
 
@@ -23,11 +19,6 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 const loadingScreen = document.getElementById("loading-screen");
-
-
-/* ========================================================
-   VIRTUAL GAME SIZE
-======================================================== */
 
 const GAME_WIDTH = 360;
 const GAME_HEIGHT = 640;
@@ -37,19 +28,16 @@ canvas.height = GAME_HEIGHT;
 
 
 /* ========================================================
-   ASSET PATHS
+   ASSETS
 ======================================================== */
 
 const PATHS = {
 
-    logo:
-        "assets/logo.png",
+    logo: "assets/logo.png",
 
-    by:
-        "assets/by.png",
+    by: "assets/by.png",
 
-    background:
-        "assets/backgrounds/BG.jpg",
+    background: "assets/backgrounds/BG.jpg",
 
     characters: {
 
@@ -66,36 +54,51 @@ const PATHS = {
     music: {
 
         menu:
-            "assets/music/menu.mp3",
+            "assets/music/title-theme.mp3",
 
-        game:
-            "assets/music/gamemusic.mp3"
+        level1:
+            "assets/music/level1.mp3",
+
+        level2:
+            "assets/music/level2.mp3",
+
+        level3:
+            "assets/music/level3.mp3",
+
+        level4:
+            "assets/music/level4.mp3",
+
+        level5:
+            "assets/music/level5.mp3"
     }
 };
 
 
 /* ========================================================
-   IMAGE LOADER
+   IMAGE LOADING
 ======================================================== */
 
 const images = {};
 
 function loadImage(name, src) {
 
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
 
         const image = new Image();
 
-        image.onload = function () {
+        image.onload = () => {
 
             images[name] = image;
 
             resolve(image);
         };
 
-        image.onerror = function () {
+        image.onerror = () => {
 
-            console.warn("Could not load image:", src);
+            console.warn(
+                "Could not load image:",
+                src
+            );
 
             images[name] = null;
 
@@ -108,17 +111,338 @@ function loadImage(name, src) {
 
 
 /* ========================================================
-   AUDIO
+   MUSIC
 ======================================================== */
 
-const menuMusic = new Audio(PATHS.music.menu);
-const gameMusic = new Audio(PATHS.music.game);
+const menuMusic =
+    new Audio(PATHS.music.menu);
+
+const levelMusic = {
+
+    1:
+        new Audio(PATHS.music.level1),
+
+    2:
+        new Audio(PATHS.music.level2),
+
+    3:
+        new Audio(PATHS.music.level3),
+
+    4:
+        new Audio(PATHS.music.level4),
+
+    5:
+        new Audio(PATHS.music.level5)
+};
+
 
 menuMusic.loop = true;
-gameMusic.loop = true;
 
 menuMusic.volume = 0.45;
-gameMusic.volume = 0.45;
+
+Object.values(levelMusic).forEach(audio => {
+
+    audio.loop = true;
+
+    audio.volume = 0.45;
+});
+
+
+/* ========================================================
+   ORIGINAL WEB AUDIO SOUND EFFECT SYSTEM
+======================================================== */
+
+let audioContext = null;
+
+
+function getAudioContext() {
+
+    if (!audioContext) {
+
+        const AudioContext =
+            window.AudioContext ||
+            window.webkitAudioContext;
+
+        if (AudioContext) {
+
+            audioContext =
+                new AudioContext();
+        }
+    }
+
+    return audioContext;
+}
+
+
+/*
+    Browsers require audio to be unlocked by
+    a user interaction.
+
+    Calling this from the first tap makes the
+    sound system available on iPhone/Android.
+*/
+
+function unlockAudio() {
+
+    const audio =
+        getAudioContext();
+
+    if (!audio) {
+        return;
+    }
+
+    if (audio.state === "suspended") {
+
+        audio.resume().catch(() => {});
+    }
+}
+
+
+/*
+    Original-style Web Audio SFX.
+*/
+
+function sfx(type) {
+
+    const audio =
+        getAudioContext();
+
+    if (!audio) {
+        return;
+    }
+
+    if (audio.state === "suspended") {
+
+        audio.resume().catch(() => {});
+    }
+
+
+    const now =
+        audio.currentTime;
+
+
+    const oscillator =
+        audio.createOscillator();
+
+    const gain =
+        audio.createGain();
+
+
+    oscillator.connect(gain);
+
+    gain.connect(audio.destination);
+
+
+    let startFrequency = 440;
+
+    let endFrequency = 440;
+
+    let duration = 0.10;
+
+    let volume = 0.12;
+
+
+    switch (type) {
+
+        /*
+            Character selection
+        */
+
+        case "character":
+
+            startFrequency = 520;
+
+            endFrequency = 760;
+
+            duration = 0.16;
+
+            volume = 0.14;
+
+            oscillator.type =
+                "sine";
+
+            break;
+
+
+        /*
+            Button
+        */
+
+        case "button":
+
+            startFrequency = 420;
+
+            endFrequency = 520;
+
+            duration = 0.09;
+
+            volume = 0.10;
+
+            oscillator.type =
+                "square";
+
+            break;
+
+
+        /*
+            Jump
+        */
+
+        case "jump":
+
+            startFrequency = 330;
+
+            endFrequency = 650;
+
+            duration = 0.16;
+
+            volume = 0.11;
+
+            oscillator.type =
+                "triangle";
+
+            break;
+
+
+        /*
+            Score
+        */
+
+        case "score":
+
+            startFrequency = 650;
+
+            endFrequency = 900;
+
+            duration = 0.12;
+
+            volume = 0.10;
+
+            oscillator.type =
+                "sine";
+
+            break;
+
+
+        /*
+            High score
+        */
+
+        case "highscore":
+
+            startFrequency = 500;
+
+            endFrequency = 1000;
+
+            duration = 0.35;
+
+            volume = 0.13;
+
+            oscillator.type =
+                "triangle";
+
+            break;
+
+
+        /*
+            Collision
+        */
+
+        case "collision":
+
+            startFrequency = 180;
+
+            endFrequency = 70;
+
+            duration = 0.30;
+
+            volume = 0.16;
+
+            oscillator.type =
+                "sawtooth";
+
+            break;
+
+
+        /*
+            Game over
+        */
+
+        case "gameover":
+
+            startFrequency = 300;
+
+            endFrequency = 80;
+
+            duration = 0.55;
+
+            volume = 0.15;
+
+            oscillator.type =
+                "sawtooth";
+
+            break;
+
+
+        default:
+
+            oscillator.disconnect();
+
+            gain.disconnect();
+
+            return;
+    }
+
+
+    oscillator.frequency.setValueAtTime(
+
+        startFrequency,
+
+        now
+    );
+
+
+    oscillator.frequency.exponentialRampToValueAtTime(
+
+        Math.max(
+            1,
+            endFrequency
+        ),
+
+        now + duration
+    );
+
+
+    gain.gain.setValueAtTime(
+
+        0.0001,
+
+        now
+    );
+
+
+    gain.gain.exponentialRampToValueAtTime(
+
+        volume,
+
+        now + 0.015
+    );
+
+
+    gain.gain.exponentialRampToValueAtTime(
+
+        0.0001,
+
+        now + duration
+    );
+
+
+    oscillator.start(now);
+
+    oscillator.stop(
+        now + duration + 0.02
+    );
+}
 
 
 /* ========================================================
@@ -127,10 +451,17 @@ gameMusic.volume = 0.45;
 
 let state = "menu";
 
-let selectedCharacter = "sprinkles";
+let selectedCharacter =
+    "sprinkles";
 
 let score = 0;
-let highScore = Number(localStorage.getItem("donutLandHighScore") || 0);
+
+let highScore =
+    Number(
+        localStorage.getItem(
+            "donutLandHighScore"
+        ) || 0
+    );
 
 let level = 1;
 
@@ -141,32 +472,6 @@ let lastTime = 0;
 let backgroundX = 0;
 
 let obstacleTimer = 0;
-
-let gameStarted = false;
-
-
-/* ========================================================
-   PLAYER
-======================================================== */
-
-const player = {
-
-    x: 68,
-
-    y: 450,
-
-    width: 62,
-
-    height: 62,
-
-    velocityY: 0,
-
-    gravity: 0.52,
-
-    jumpPower: -10.5,
-
-    grounded: false
-};
 
 
 /* ========================================================
@@ -205,6 +510,30 @@ const characters = {
 
 
 /* ========================================================
+   PLAYER
+======================================================== */
+
+const player = {
+
+    x: 68,
+
+    y: 450,
+
+    width: 62,
+
+    height: 62,
+
+    velocityY: 0,
+
+    gravity: 0.52,
+
+    jumpPower: -10.5,
+
+    grounded: false
+};
+
+
+/* ========================================================
    OBSTACLES
 ======================================================== */
 
@@ -235,18 +564,27 @@ const obstacleImages = [];
 
 
 /* ========================================================
-   LOAD EVERYTHING
+   LOAD ASSETS
 ======================================================== */
 
 async function loadAssets() {
 
     await Promise.all([
 
-        loadImage("logo", PATHS.logo),
+        loadImage(
+            "logo",
+            PATHS.logo
+        ),
 
-        loadImage("by", PATHS.by),
+        loadImage(
+            "by",
+            PATHS.by
+        ),
 
-        loadImage("background", PATHS.background),
+        loadImage(
+            "background",
+            PATHS.background
+        ),
 
         loadImage(
             "sprinkles",
@@ -265,48 +603,83 @@ async function loadAssets() {
     ]);
 
 
-    for (let i = 0; i < obstacleSources.length; i++) {
+    for (
+        let i = 0;
+        i < obstacleSources.length;
+        i++
+    ) {
 
-        const image = await loadImage(
-            "obstacle" + i,
-            obstacleSources[i]
-        );
+        const image =
+            await loadImage(
+                "obstacle" + i,
+                obstacleSources[i]
+            );
 
         if (image) {
-            obstacleImages.push(image);
+
+            obstacleImages.push(
+                image
+            );
         }
     }
 
 
-    loadingScreen.classList.add("hidden");
+    loadingScreen.classList.add(
+        "hidden"
+    );
+
 
     startMenuMusic();
 
-    requestAnimationFrame(gameLoop);
+
+    requestAnimationFrame(
+        gameLoop
+    );
 }
 
 
 /* ========================================================
-   AUDIO CONTROL
+   MUSIC CONTROL
 ======================================================== */
 
-function startMenuMusic() {
-
-    gameMusic.pause();
-
-    gameMusic.currentTime = 0;
-
-    menuMusic.play().catch(() => {});
-}
-
-
-function startGameMusic() {
+function stopAllMusic() {
 
     menuMusic.pause();
 
     menuMusic.currentTime = 0;
 
-    gameMusic.play().catch(() => {});
+
+    Object.values(levelMusic)
+        .forEach(audio => {
+
+            audio.pause();
+
+            audio.currentTime = 0;
+        });
+}
+
+
+function startMenuMusic() {
+
+    stopAllMusic();
+
+    menuMusic.play()
+        .catch(() => {});
+}
+
+
+function startLevelMusic() {
+
+    stopAllMusic();
+
+
+    const music =
+        levelMusic[level] ||
+        levelMusic[1];
+
+
+    music.play()
+        .catch(() => {});
 }
 
 
@@ -316,11 +689,14 @@ function startGameMusic() {
 
 function drawBackground() {
 
-    const background = images.background;
+    const background =
+        images.background;
+
 
     if (!background) {
 
-        ctx.fillStyle = "#17213b";
+        ctx.fillStyle =
+            "#17213b";
 
         ctx.fillRect(
             0,
@@ -333,24 +709,23 @@ function drawBackground() {
     }
 
 
-    /*
-        Keep the original background repeating.
-
-        The image is scaled to the complete portrait height.
-        It repeats horizontally as the player moves.
-    */
-
     const scale =
-        GAME_HEIGHT / background.height;
+        GAME_HEIGHT /
+        background.height;
+
 
     const width =
-        background.width * scale;
+        background.width *
+        scale;
 
 
-    backgroundX -= gameSpeed * 0.25;
+    backgroundX -=
+        gameSpeed * 0.25;
 
 
-    if (backgroundX <= -width) {
+    if (
+        backgroundX <= -width
+    ) {
 
         backgroundX += width;
     }
@@ -361,8 +736,11 @@ function drawBackground() {
         background,
 
         backgroundX,
+
         0,
+
         width,
+
         GAME_HEIGHT
     );
 
@@ -372,8 +750,11 @@ function drawBackground() {
         background,
 
         backgroundX + width,
+
         0,
+
         width,
+
         GAME_HEIGHT
     );
 
@@ -383,8 +764,11 @@ function drawBackground() {
         background,
 
         backgroundX + width * 2,
+
         0,
+
         width,
+
         GAME_HEIGHT
     );
 }
@@ -396,20 +780,27 @@ function drawBackground() {
 
 function drawLogo() {
 
-    const logo = images.logo;
+    const logo =
+        images.logo;
+
 
     if (!logo) {
 
-        ctx.fillStyle = "#fff";
+        ctx.fillStyle =
+            "#fff";
 
-        ctx.textAlign = "center";
+        ctx.textAlign =
+            "center";
 
         ctx.font =
             "bold 30px Arial";
 
         ctx.fillText(
+
             "DONUT LAND",
+
             GAME_WIDTH / 2,
+
             90
         );
 
@@ -422,7 +813,8 @@ function drawLogo() {
     const scale =
         Math.min(
             1,
-            maxWidth / logo.width
+            maxWidth /
+            logo.width
         );
 
 
@@ -454,7 +846,9 @@ function drawLogo() {
 
 function drawByGraphic() {
 
-    const by = images.by;
+    const by =
+        images.by;
+
 
     if (!by) {
         return;
@@ -463,10 +857,12 @@ function drawByGraphic() {
 
     const maxWidth = 210;
 
+
     const scale =
         Math.min(
             1,
-            maxWidth / by.width
+            maxWidth /
+            by.width
         );
 
 
@@ -483,7 +879,9 @@ function drawByGraphic() {
 
         (GAME_WIDTH - width) / 2,
 
-        GAME_HEIGHT - height - 46,
+        GAME_HEIGHT -
+            height -
+            46,
 
         width,
 
@@ -498,12 +896,15 @@ function drawByGraphic() {
 
 function drawCopyright() {
 
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle =
+        "#fff";
 
-    ctx.textAlign = "center";
+    ctx.textAlign =
+        "center";
 
     ctx.font =
         "10px Arial";
+
 
     ctx.fillText(
 
@@ -513,80 +914,6 @@ function drawCopyright() {
 
         GAME_HEIGHT - 17
     );
-}
-
-
-/* ========================================================
-   MENU
-======================================================== */
-
-function drawMenu() {
-
-    drawBackground();
-
-    drawLogo();
-
-
-    /*
-        PLAY button
-    */
-
-    drawButton(
-
-        GAME_WIDTH / 2,
-
-        300,
-
-        210,
-
-        58,
-
-        "PLAY"
-    );
-
-
-    /*
-        CHARACTER button
-    */
-
-    drawButton(
-
-        GAME_WIDTH / 2,
-
-        375,
-
-        210,
-
-        58,
-
-        "CHARACTERS"
-    );
-
-
-    /*
-        High score
-    */
-
-    ctx.textAlign = "center";
-
-    ctx.fillStyle = "#fff";
-
-    ctx.font =
-        "bold 16px Arial";
-
-    ctx.fillText(
-
-        "HIGH SCORE: " + highScore,
-
-        GAME_WIDTH / 2,
-
-        455
-    );
-
-
-    drawByGraphic();
-
-    drawCopyright();
 }
 
 
@@ -608,8 +935,10 @@ function drawButton(
     ctx.fillStyle =
         "rgba(0,0,0,0.78)";
 
+
     ctx.strokeStyle =
         "#ffffff";
+
 
     ctx.lineWidth = 3;
 
@@ -636,11 +965,14 @@ function drawButton(
     ctx.fillStyle =
         "#ffffff";
 
+
     ctx.textAlign =
         "center";
 
+
     ctx.textBaseline =
         "middle";
+
 
     ctx.font =
         "bold 23px Arial";
@@ -661,6 +993,74 @@ function drawButton(
 
 
 /* ========================================================
+   MENU
+======================================================== */
+
+function drawMenu() {
+
+    drawBackground();
+
+    drawLogo();
+
+
+    drawButton(
+
+        GAME_WIDTH / 2,
+
+        300,
+
+        210,
+
+        58,
+
+        "PLAY"
+    );
+
+
+    drawButton(
+
+        GAME_WIDTH / 2,
+
+        375,
+
+        210,
+
+        58,
+
+        "CHARACTERS"
+    );
+
+
+    ctx.textAlign =
+        "center";
+
+
+    ctx.fillStyle =
+        "#fff";
+
+
+    ctx.font =
+        "bold 16px Arial";
+
+
+    ctx.fillText(
+
+        "HIGH SCORE: " +
+        highScore,
+
+        GAME_WIDTH / 2,
+
+        455
+    );
+
+
+    drawByGraphic();
+
+    drawCopyright();
+}
+
+
+/* ========================================================
    CHARACTER SELECT
 ======================================================== */
 
@@ -669,12 +1069,17 @@ function drawCharacterSelect() {
     drawBackground();
 
 
-    ctx.textAlign = "center";
+    ctx.textAlign =
+        "center";
 
-    ctx.fillStyle = "#fff";
+
+    ctx.fillStyle =
+        "#fff";
+
 
     ctx.font =
         "bold 27px Arial";
+
 
     ctx.fillText(
 
@@ -696,13 +1101,16 @@ function drawCharacterSelect() {
 
     const gap = 10;
 
+
     const totalWidth =
         cardWidth * 3 +
         gap * 2;
 
 
     const startX =
-        (GAME_WIDTH - totalWidth) / 2;
+        (GAME_WIDTH -
+            totalWidth) /
+        2;
 
 
     names.forEach(
@@ -720,10 +1128,6 @@ function drawCharacterSelect() {
 
             const y = 105;
 
-
-            /*
-                Card
-            */
 
             ctx.fillStyle =
                 name === selectedCharacter
@@ -762,32 +1166,36 @@ function drawCharacterSelect() {
             ctx.stroke();
 
 
-            /*
-                Character image
-            */
-
             const image =
-                images[character.imageName];
+                images[
+                    character.imageName
+                ];
 
 
             if (image) {
 
                 const maxSize = 78;
 
+
                 const scale =
                     Math.min(
 
-                        maxSize / image.width,
+                        maxSize /
+                            image.width,
 
-                        maxSize / image.height
+                        maxSize /
+                            image.height
                     );
 
 
                 const width =
-                    image.width * scale;
+                    image.width *
+                    scale;
+
 
                 const height =
-                    image.height * scale;
+                    image.height *
+                    scale;
 
 
                 ctx.drawImage(
@@ -795,7 +1203,9 @@ function drawCharacterSelect() {
                     image,
 
                     x +
-                        (cardWidth - width) / 2,
+                        (cardWidth -
+                            width) /
+                            2,
 
                     y + 22,
 
@@ -805,10 +1215,6 @@ function drawCharacterSelect() {
                 );
             }
 
-
-            /*
-                Character name
-            */
 
             ctx.fillStyle =
                 name === selectedCharacter
@@ -828,7 +1234,9 @@ function drawCharacterSelect() {
                 character.name;
 
 
-            if (name === "chocolate") {
+            if (
+                name === "chocolate"
+            ) {
 
                 displayName =
                     "CHOCOLATE";
@@ -839,22 +1247,27 @@ function drawCharacterSelect() {
 
                 displayName,
 
-                x + cardWidth / 2,
+                x +
+                    cardWidth / 2,
 
                 y + 125
             );
 
 
-            if (name === selectedCharacter) {
+            if (
+                name === selectedCharacter
+            ) {
 
                 ctx.font =
                     "bold 10px Arial";
+
 
                 ctx.fillText(
 
                     "SELECTED",
 
-                    x + cardWidth / 2,
+                    x +
+                        cardWidth / 2,
 
                     y + 148
                 );
@@ -862,10 +1275,6 @@ function drawCharacterSelect() {
         }
     );
 
-
-    /*
-        Back button
-    */
 
     drawButton(
 
@@ -880,10 +1289,6 @@ function drawCharacterSelect() {
         "BACK"
     );
 
-
-    /*
-        Continue
-    */
 
     drawButton(
 
@@ -904,7 +1309,7 @@ function drawCharacterSelect() {
 
 
 /* ========================================================
-   GAME
+   GAME DRAW
 ======================================================== */
 
 function drawGame() {
@@ -912,42 +1317,26 @@ function drawGame() {
     drawBackground();
 
 
-    /*
-        Ground
-    */
-
-    const groundY =
-        GAME_HEIGHT - 90;
-
-
-    /*
-        Player
-    */
-
-    drawPlayer();
-
-
-    /*
-        Obstacles
-    */
-
     obstacles.forEach(
         obstacle => {
 
-            drawObstacle(obstacle);
+            drawObstacle(
+                obstacle
+            );
         }
     );
 
 
-    /*
-        Score
-    */
+    drawPlayer();
+
 
     ctx.textAlign =
         "left";
 
+
     ctx.fillStyle =
         "#fff";
+
 
     ctx.font =
         "bold 18px Arial";
@@ -970,7 +1359,8 @@ function drawGame() {
 
     ctx.fillText(
 
-        "LEVEL " + level,
+        "LEVEL " +
+        level,
 
         15,
 
@@ -980,17 +1370,21 @@ function drawGame() {
 
 
 /* ========================================================
-   PLAYER DRAW
+   PLAYER
 ======================================================== */
 
 function drawPlayer() {
 
     const character =
-        characters[selectedCharacter];
+        characters[
+            selectedCharacter
+        ];
 
 
     const image =
-        images[character.imageName];
+        images[
+            character.imageName
+        ];
 
 
     if (!image) {
@@ -1001,11 +1395,14 @@ function drawPlayer() {
 
         ctx.beginPath();
 
+
         ctx.arc(
 
-            player.x + player.width / 2,
+            player.x +
+                player.width / 2,
 
-            player.y + player.height / 2,
+            player.y +
+                player.height / 2,
 
             player.width / 2,
 
@@ -1013,6 +1410,7 @@ function drawPlayer() {
 
             Math.PI * 2
         );
+
 
         ctx.fill();
 
@@ -1036,15 +1434,18 @@ function drawPlayer() {
 
 
 /* ========================================================
-   OBSTACLE DRAW
+   OBSTACLE
 ======================================================== */
 
-function drawObstacle(obstacle) {
+function drawObstacle(
+    obstacle
+) {
 
     if (!obstacle.image) {
 
         ctx.fillStyle =
             "#222";
+
 
         ctx.fillRect(
 
@@ -1131,7 +1532,7 @@ function createObstacle() {
 
 
 /* ========================================================
-   UPDATE PLAYER
+   PLAYER UPDATE
 ======================================================== */
 
 function updatePlayer(delta) {
@@ -1147,7 +1548,8 @@ function updatePlayer(delta) {
 
 
     const groundY =
-        GAME_HEIGHT - 88 -
+        GAME_HEIGHT -
+        88 -
         player.height;
 
 
@@ -1158,8 +1560,10 @@ function updatePlayer(delta) {
         player.y =
             groundY;
 
+
         player.velocityY =
             0;
+
 
         player.grounded =
             true;
@@ -1173,17 +1577,13 @@ function updatePlayer(delta) {
 
 
 /* ========================================================
-   UPDATE OBSTACLES
+   OBSTACLE UPDATE
 ======================================================== */
 
 function updateObstacles(delta) {
 
     obstacleTimer += delta;
 
-
-    /*
-        Spawn obstacles.
-    */
 
     if (
         obstacleTimer >
@@ -1215,15 +1615,15 @@ function updateObstacles(delta) {
                 obstacle.counted =
                     true;
 
+
                 score += 10;
+
+
+                sfx("score");
             }
         }
     );
 
-
-    /*
-        Remove old obstacles.
-    */
 
     for (
         let i =
@@ -1255,11 +1655,6 @@ function updateObstacles(delta) {
 
 function checkCollision() {
 
-    /*
-        Slightly shrink the collision
-        boxes so the game feels fair.
-    */
-
     const padding = 9;
 
 
@@ -1290,20 +1685,16 @@ function checkCollision() {
         const obstacleBox = {
 
             x:
-                obstacle.x +
-                5,
+                obstacle.x + 5,
 
             y:
-                obstacle.y +
-                5,
+                obstacle.y + 5,
 
             width:
-                obstacle.width -
-                10,
+                obstacle.width - 10,
 
             height:
-                obstacle.height -
-                10
+                obstacle.height - 10
         };
 
 
@@ -1337,6 +1728,38 @@ function checkCollision() {
 
 
 /* ========================================================
+   JUMP
+======================================================== */
+
+function jump() {
+
+    if (
+        state !== "game"
+    ) {
+        return;
+    }
+
+
+    if (
+        !player.grounded
+    ) {
+        return;
+    }
+
+
+    player.velocityY =
+        player.jumpPower;
+
+
+    player.grounded =
+        false;
+
+
+    sfx("jump");
+}
+
+
+/* ========================================================
    START GAME
 ======================================================== */
 
@@ -1346,47 +1769,30 @@ function startGame() {
         "game";
 
 
-    score =
-        0;
+    score = 0;
+
+    level = 1;
+
+    gameSpeed = 3.2;
+
+    backgroundX = 0;
+
+    obstacleTimer = 0;
 
 
-    level =
-        1;
+    obstacles.length = 0;
 
 
-    gameSpeed =
-        3.2;
+    player.x = 68;
+
+    player.y = 450;
+
+    player.velocityY = 0;
+
+    player.grounded = true;
 
 
-    backgroundX =
-        0;
-
-
-    obstacleTimer =
-        0;
-
-
-    obstacles.length =
-        0;
-
-
-    player.x =
-        68;
-
-
-    player.y =
-        450;
-
-
-    player.velocityY =
-        0;
-
-
-    gameStarted =
-        true;
-
-
-    startGameMusic();
+    startLevelMusic();
 }
 
 
@@ -1398,6 +1804,10 @@ function gameOver() {
 
     state =
         "gameover";
+
+
+    const previousHighScore =
+        highScore;
 
 
     if (
@@ -1415,18 +1825,22 @@ function gameOver() {
 
             highScore
         );
+
+
+        sfx("highscore");
+
+    } else {
+
+        sfx("gameover");
     }
 
 
-    gameMusic.pause();
-
-    gameMusic.currentTime =
-        0;
+    stopAllMusic();
 }
 
 
 /* ========================================================
-   DRAW GAME OVER
+   GAME OVER DRAW
 ======================================================== */
 
 function drawGameOver() {
@@ -1532,17 +1946,68 @@ function drawGameOver() {
 
 
 /* ========================================================
-   INPUT
+   MOBILE TOUCH CONTROL
 ======================================================== */
+
+/*
+    THIS is the important part.
+
+    On a phone, touching the game while the game
+    is running immediately calls jump().
+
+    It does NOT require a keyboard.
+
+    We use pointerdown because it works with:
+      - iPhone
+      - Android
+      - mouse
+      - touchscreen laptops
+===========================================================
+*/
 
 canvas.addEventListener(
 
     "pointerdown",
 
-    function (event) {
+    function(event) {
 
         event.preventDefault();
 
+
+        /*
+            Unlock the browser audio system
+            on the user's first interaction.
+        */
+
+        unlockAudio();
+
+
+        /*
+            GAMEPLAY:
+
+            Any tap anywhere on the game
+            causes the selected character
+            to jump.
+
+            No coordinate checking is necessary.
+        */
+
+        if (
+            state === "game"
+        ) {
+
+            jump();
+
+            return;
+        }
+
+
+        /*
+            MENU / CHARACTER SELECT
+
+            These screens still need their
+            coordinates so their buttons work.
+        */
 
         const rect =
             canvas.getBoundingClientRect();
@@ -1551,6 +2016,7 @@ canvas.addEventListener(
         const scaleX =
             GAME_WIDTH /
             rect.width;
+
 
         const scaleY =
             GAME_HEIGHT /
@@ -1569,7 +2035,31 @@ canvas.addEventListener(
             scaleY;
 
 
-        handleInput(x, y);
+        handleMenuInput(
+            x,
+            y
+        );
+    },
+
+    {
+        passive: false
+    }
+);
+
+
+/*
+    Prevent scrolling/zooming gestures
+    while touching the game.
+*/
+
+canvas.addEventListener(
+
+    "touchstart",
+
+    function(event) {
+
+        event.preventDefault();
+
     },
 
     {
@@ -1579,23 +2069,20 @@ canvas.addEventListener(
 
 
 /* ========================================================
-   INPUT HANDLER
+   MENU INPUT
 ======================================================== */
 
-function handleInput(x, y) {
+function handleMenuInput(
+    x,
+    y
+) {
 
 
-    /*
-        MENU
-    */
+    /* MENU */
 
     if (
         state === "menu"
     ) {
-
-        /*
-            PLAY
-        */
 
         if (
             x > 70 &&
@@ -1604,6 +2091,8 @@ function handleInput(x, y) {
             y < 330
         ) {
 
+            sfx("button");
+
             state =
                 "characterSelect";
 
@@ -1611,16 +2100,14 @@ function handleInput(x, y) {
         }
 
 
-        /*
-            CHARACTERS
-        */
-
         if (
             x > 70 &&
             x < 290 &&
             y > 345 &&
             y < 405
         ) {
+
+            sfx("button");
 
             state =
                 "characterSelect";
@@ -1630,23 +2117,22 @@ function handleInput(x, y) {
     }
 
 
-    /*
-        CHARACTER SELECT
-    */
+    /* CHARACTER SELECT */
 
     else if (
-        state === "characterSelect"
+        state ===
+        "characterSelect"
     ) {
 
-        const cardWidth =
-            100;
+        const cardWidth = 100;
 
-        const gap =
-            10;
+        const gap = 10;
+
 
         const totalWidth =
             cardWidth * 3 +
             gap * 2;
+
 
         const startX =
             (GAME_WIDTH -
@@ -1655,7 +2141,9 @@ function handleInput(x, y) {
 
 
         const names =
-            Object.keys(characters);
+            Object.keys(
+                characters
+            );
 
 
         for (
@@ -1673,24 +2161,36 @@ function handleInput(x, y) {
 
 
             if (
+
                 x >= cardX &&
-                x <= cardX +
+
+                x <=
+                    cardX +
                     cardWidth &&
+
                 y >= 105 &&
+
                 y <= 280
+
             ) {
 
                 selectedCharacter =
                     names[i];
+
+
+                /*
+                    ORIGINAL CHARACTER
+                    SELECTION SOUND
+                */
+
+                sfx("character");
 
                 return;
             }
         }
 
 
-        /*
-            BACK
-        */
+        /* BACK */
 
         if (
             x > 105 &&
@@ -1699,8 +2199,11 @@ function handleInput(x, y) {
             y < 535
         ) {
 
+            sfx("button");
+
             state =
                 "menu";
+
 
             startMenuMusic();
 
@@ -1708,9 +2211,7 @@ function handleInput(x, y) {
         }
 
 
-        /*
-            PLAY
-        */
+        /* PLAY */
 
         if (
             x > 85 &&
@@ -1719,6 +2220,8 @@ function handleInput(x, y) {
             y < 600
         ) {
 
+            sfx("button");
+
             startGame();
 
             return;
@@ -1726,24 +2229,11 @@ function handleInput(x, y) {
     }
 
 
-    /*
-        GAME
-    */
+    /* GAME OVER */
 
     else if (
-        state === "game"
-    ) {
-
-        jump();
-    }
-
-
-    /*
-        GAME OVER
-    */
-
-    else if (
-        state === "gameover"
+        state ===
+        "gameover"
     ) {
 
         if (
@@ -1752,6 +2242,8 @@ function handleInput(x, y) {
             y > 350 &&
             y < 410
         ) {
+
+            sfx("button");
 
             startGame();
 
@@ -1766,8 +2258,11 @@ function handleInput(x, y) {
             y < 480
         ) {
 
+            sfx("button");
+
             state =
                 "menu";
+
 
             startMenuMusic();
 
@@ -1778,51 +2273,36 @@ function handleInput(x, y) {
 
 
 /* ========================================================
-   JUMP
+   OPTIONAL DESKTOP CONTROLS
 ======================================================== */
 
-function jump() {
+/*
+    These are ONLY for testing on a computer.
 
-    if (
-        state !== "game"
-    ) {
-        return;
-    }
-
-
-    if (
-        player.grounded
-    ) {
-
-        player.velocityY =
-            player.jumpPower;
-
-        player.grounded =
-            false;
-    }
-}
-
-
-/* ========================================================
-   KEYBOARD
-   Kept only for desktop testing.
-   Phone remains tap-only.
-======================================================== */
+    They are NOT required for the phone version.
+*/
 
 window.addEventListener(
 
     "keydown",
 
-    function (event) {
+    function(event) {
 
         if (
+
             event.code ===
                 "Space" ||
+
             event.code ===
                 "ArrowUp"
+
         ) {
 
             event.preventDefault();
+
+
+            unlockAudio();
+
 
             if (
                 state === "game"
@@ -1864,12 +2344,15 @@ function updateLevel() {
             3.2 +
             (level - 1) *
             0.35;
+
+
+        startLevelMusic();
     }
 }
 
 
 /* ========================================================
-   MAIN UPDATE
+   UPDATE
 ======================================================== */
 
 function update(delta) {
@@ -1882,9 +2365,15 @@ function update(delta) {
     }
 
 
-    updatePlayer(delta);
+    updatePlayer(
+        delta
+    );
 
-    updateObstacles(delta);
+
+    updateObstacles(
+        delta
+    );
+
 
     updateLevel();
 
@@ -1899,7 +2388,7 @@ function update(delta) {
 
 
 /* ========================================================
-   MAIN DRAW
+   DRAW
 ======================================================== */
 
 function draw() {
@@ -1923,7 +2412,8 @@ function draw() {
         drawMenu();
 
     } else if (
-        state === "characterSelect"
+        state ===
+        "characterSelect"
     ) {
 
         drawCharacterSelect();
@@ -1947,7 +2437,9 @@ function draw() {
    GAME LOOP
 ======================================================== */
 
-function gameLoop(timestamp) {
+function gameLoop(
+    timestamp
+) {
 
     if (!lastTime) {
 
@@ -1964,11 +2456,6 @@ function gameLoop(timestamp) {
     lastTime =
         timestamp;
 
-
-    /*
-        Prevent huge jumps after
-        browser tab switching.
-    */
 
     delta =
         Math.min(
@@ -2002,65 +2489,97 @@ function roundRect(
 
     ctx.beginPath();
 
+
     ctx.moveTo(
         x + radius,
         y
     );
 
+
     ctx.lineTo(
         x + width - radius,
         y
     );
 
+
     ctx.quadraticCurveTo(
+
         x + width,
+
         y,
+
         x + width,
+
         y + radius
     );
 
+
     ctx.lineTo(
+
         x + width,
+
         y + height - radius
     );
 
+
     ctx.quadraticCurveTo(
+
         x + width,
+
         y + height,
+
         x + width - radius,
+
         y + height
     );
+
 
     ctx.lineTo(
+
         x + radius,
+
         y + height
     );
 
+
     ctx.quadraticCurveTo(
+
         x,
+
         y + height,
+
         x,
+
         y + height - radius
     );
 
+
     ctx.lineTo(
+
         x,
+
         y + radius
     );
 
+
     ctx.quadraticCurveTo(
+
         x,
+
         y,
+
         x + radius,
+
         y
     );
+
 
     ctx.closePath();
 }
 
 
 /* ========================================================
-   START
+   START GAME
 ======================================================== */
 
 loadAssets();
