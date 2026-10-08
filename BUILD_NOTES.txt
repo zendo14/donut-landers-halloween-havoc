@@ -1,0 +1,13 @@
+GITHUB PAGES CHECKLIST
+
+[ ] Create a public GitHub repository.
+[ ] Upload the CONTENTS of this folder into the repository root.
+[ ] Confirm index.html is in the root next to game.js and style.css.
+[ ] Settings > Pages > Deploy from a branch > main > /(root) > Save.
+[ ] Wait for the Pages URL shown by GitHub.
+[ ] Test the URL on an iPhone and an Android phone in portrait orientation.
+[ ] Tap the screen to jump; no keyboard should be needed on mobile.
+[ ] Add `title-theme.mp3` if you want title music and add one `game-music.mp3` for the single looping gameplay track.
+[ ] Embed the published URL into Google Sites using Insert > Embed > By URL.
+
+Important: local Top 10 scores are per browser/device, not shared between players.
